@@ -1,7 +1,7 @@
 #!/bin/bash
-# One-command updater — pulls the latest main, installs deps, migrates the DB, rebuilds,
-# and restarts the PM2 process. Triggered from the UI (Settings → owner-only "Update" button,
-# which spawns this detached and streams the log) or run by hand:  bash update.sh
+# One-command updater — pulls the latest main from THIS INSTALL'S FORK, installs deps, migrates
+# the DB, rebuilds, and restarts the PM2 process. Triggered from the UI (Settings → owner-only
+# "Update" button, which spawns this detached and streams the log) or run by hand:  bash update.sh
 #
 # It cd's to its own directory so it works regardless of where it's invoked from.
 set -o pipefail
@@ -12,6 +12,19 @@ cd "$(dirname "$0")" || exit 1
 # "pm2 stop all", which takes unrelated neighbours down for the whole build window.
 PM2_NAME="$(grep -E '^PM2_PROC_NAME=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\"' | tr -d "'")"
 PM2_NAME="${PM2_NAME:-opengsc}"
+
+# ─── where updates come from ────────────────────────────────────────────────────────────────
+# Updates pull from the FORK, not origin: origin (fenjo26/opengsc) is third-party upstream this
+# install has no push rights to, and the fork (abdullahbokl/OpenGSC) carries the install's own
+# committed state on top of it. origin is still fetched for reference only — a stale or failed
+# upstream fetch must never block an update of the install itself. Override via .env:
+#   UPDATE_REMOTE=<remote>   (default fork)
+#   UPDATE_BRANCH=<branch>   (default main)
+UPDATE_REMOTE="$(grep -E '^UPDATE_REMOTE=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\"' | tr -d "'")"
+UPDATE_REMOTE="${UPDATE_REMOTE:-fork}"
+UPDATE_BRANCH="$(grep -E '^UPDATE_BRANCH=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\"' | tr -d "'")"
+UPDATE_BRANCH="${UPDATE_BRANCH:-main}"
+UPDATE_REF="${UPDATE_REMOTE}/${UPDATE_BRANCH}"
 
 # ─── survive being started from the UI ─────────────────────────────────────────────────────
 # Two traps, both fatal to an update started from the Settings button, both handled here so they
@@ -49,8 +62,16 @@ main() {
 echo "___OPENGSC_UPDATE_START___"
 echo "[update] $(date -u) — starting in $(pwd)"
 
-echo "[update] git fetch..."
-git fetch origin || { echo "[update] git fetch FAILED"; echo "___OPENGSC_UPDATE_FAIL___"; exit 1; }
+echo "[update] git fetch origin (upstream, reference only — failure is non-fatal)..."
+git fetch origin >/dev/null 2>&1 || echo "[update] origin fetch failed — upstream reference may be stale (non-fatal)"
+
+echo "[update] git fetch $UPDATE_REMOTE (update source)..."
+git fetch "$UPDATE_REMOTE" || { echo "[update] git fetch $UPDATE_REMOTE FAILED"; echo "___OPENGSC_UPDATE_FAIL___"; exit 1; }
+
+if ! git rev-parse --verify --quiet "$UPDATE_REF" >/dev/null; then
+  echo "[update] FAILED: $UPDATE_REF does not exist — check the UPDATE_REMOTE/UPDATE_BRANCH in .env"
+  echo "___OPENGSC_UPDATE_FAIL___"; exit 1
+fi
 
 # The backup happens BEFORE `git reset --hard`, not after, and the ordering is deliberate.
 #
@@ -138,8 +159,33 @@ fail_and_rollback() {
   exit 1
 }
 
-echo "[update] git reset --hard origin/main..."
-git reset --hard origin/main || fail_and_rollback "git reset"
+# ─── local state guards: never silently discard work ────────────────────────────────────────
+# The reset below restores every TRACKED file. Untracked files (.env, data/*.bak, data/prod.db
+# on an absolute path) are untouched by reset --hard, but three states MUST NOT reach it:
+#
+# 1. Uncommitted tracked modifications — the operator's work in progress. Refuse, list them.
+# 2. Local commits fork/main does not contain — the reset would discard them. If HEAD is an
+#    ancestor of the update ref the reset is a pure fast-forward and safe; a diverged tree must
+#    be reconciled (push to the fork or rebase) by the operator first. This install's own
+#    commits live on the fork, so an up-to-date install always passes this check.
+# 3. A missing update ref — handled right after the fetch above.
+#
+# Everything here exits BEFORE the rollback point, so nothing has been changed yet and the
+# app keeps running the current build.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "[update] UNSAFE: uncommitted local changes — refusing to update (never discard work). Commit or stash first:"
+  git status --short
+  echo "___OPENGSC_UPDATE_FAIL___"; exit 1
+fi
+if ! git merge-base --is-ancestor HEAD "$UPDATE_REF"; then
+  echo "[update] UNSAFE: local main has commits not on $UPDATE_REF — refusing (never discard commits). Reconcile first:"
+  git log --oneline "$UPDATE_REF..HEAD" | head -20
+  echo "___OPENGSC_UPDATE_FAIL___"; exit 1
+fi
+echo "[update] local state safe: HEAD is an ancestor of $UPDATE_REF (update = fast-forward, no work discarded)"
+
+echo "[update] git reset --hard $UPDATE_REF ..."
+git reset --hard "$UPDATE_REF" || fail_and_rollback "git reset"
 
 echo "[update] npm install..."
 # --include=dev is not optional here, and the reason is easy to miss.
