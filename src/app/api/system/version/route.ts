@@ -4,6 +4,7 @@ import { promisify } from "util";
 import { exec as execCb } from "child_process";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { mapCompare, parseRepoSlug } from "@/lib/system/version";
 
 const exec = promisify(execCb);
 
@@ -15,17 +16,33 @@ function pkgVersion(): string {
 }
 
 // GET /api/system/version
-// Compares the locally-checked-out git commit with the latest commit on origin/main
-// (GitHub API) and returns { local, remote, behind, updateAvailable, changelog[], isGit }.
-// No secrets — reads the public repo. Used by the dashboard "update available" banner.
+// Compares the locally-checked-out git commit with the latest commit on the UPDATE SOURCE —
+// the same remote/branch update.sh pulls from: UPDATE_REMOTE/UPDATE_BRANCH in .env, defaults
+// fork/main. origin (fenjo26/opengsc) stays upstream reference only; comparing against it
+// would false-alarm when upstream moves ahead of the fork. Resolves the remote name to a
+// GitHub owner/repo slug via `git config remote.<name>.url`, so the banner and the updater
+// can never disagree about what "update available" means. No secrets — reads the public repo.
+// Used by the dashboard "update available" banner.
 
-const REPO = "fenjo26/opengsc";
-const BRANCH = "main";
+const REMOTE = process.env.UPDATE_REMOTE || "fork";
+const BRANCH = process.env.UPDATE_BRANCH || "main";
 
 async function localCommit(): Promise<string | null> {
   try {
     const { stdout } = await exec("git rev-parse HEAD", { cwd: process.cwd(), timeout: 5000 });
     return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// Remote name -> GitHub owner/repo slug. The name is env-supplied, so it is restricted to the
+// characters a git remote name can legally contain before it ever reaches a shell.
+async function repoSlug(): Promise<string | null> {
+  if (!/^[A-Za-z0-9._-]+$/.test(REMOTE)) return null;
+  try {
+    const { stdout } = await exec(`git config --get remote.${REMOTE}.url`, { cwd: process.cwd(), timeout: 5000 });
+    return parseRepoSlug(stdout.trim());
   } catch {
     return null;
   }
@@ -41,10 +58,16 @@ export async function GET() {
     return NextResponse.json({ isGit: false, updateAvailable: false, version: pkgVersion() });
   }
 
+  const repo = await repoSlug();
+  if (!repo) {
+    // Update source not resolvable (remote missing or URL unparsable): never report an update.
+    return NextResponse.json({ isGit: true, local: local.slice(0, 7), updateAvailable: false, version: pkgVersion(), error: `update source ${REMOTE}/${BRANCH} not resolvable` });
+  }
+
   try {
     const headers = { Accept: "application/vnd.github+json", "User-Agent": "opengsc" };
-    // Latest commit on main
-    const relRes = await fetch(`https://api.github.com/repos/${REPO}/commits/${BRANCH}`, { headers, signal: AbortSignal.timeout(10000) });
+    // Latest commit on the update branch
+    const relRes = await fetch(`https://api.github.com/repos/${repo}/commits/${BRANCH}`, { headers, signal: AbortSignal.timeout(10000) });
     if (!relRes.ok) return NextResponse.json({ isGit: true, local, updateAvailable: false, error: `github ${relRes.status}` });
     const latest = await relRes.json();
     const remote = String(latest.sha ?? "");
@@ -53,24 +76,14 @@ export async function GET() {
       return NextResponse.json({ isGit: true, version: pkgVersion(), local: local.slice(0, 7), remote: remote.slice(0, 7), behind: 0, updateAvailable: false });
     }
 
-    // How far behind + changelog (commit subjects between local and remote)
+    // How far behind + changelog (commit subjects between local and remote). Best-effort:
+    // a compare failure still yields updateAvailable: false via mapCompare's defaults.
     let behind = 0;
     let changelog: { sha: string; message: string; date: string }[] = [];
     try {
-      const cmpRes = await fetch(`https://api.github.com/repos/${REPO}/compare/${local}...${remote}`, { headers, signal: AbortSignal.timeout(10000) });
+      const cmpRes = await fetch(`https://api.github.com/repos/${repo}/compare/${local}...${remote}`, { headers, signal: AbortSignal.timeout(10000) });
       if (cmpRes.ok) {
-        const cmp = await cmpRes.json();
-        behind = cmp.ahead_by ?? cmp.total_commits ?? 0;
-        changelog = (cmp.commits ?? [])
-          .slice(-30)
-          .reverse()
-          .map((c: { sha?: unknown; commit?: { message?: unknown; author?: { date?: string } } }) => ({
-            sha: String(c.sha ?? "").slice(0, 7),
-            message: String(c.commit?.message ?? "").split("\n")[0],
-            date: c.commit?.author?.date ?? "",
-          }))
-          // Hide noise
-          .filter((c: { message: string }) => c.message && !/^merge /i.test(c.message));
+        ({ behind, changelog } = mapCompare(await cmpRes.json()));
       }
     } catch { /* compare is best-effort — the update flag still works without it */ }
 
