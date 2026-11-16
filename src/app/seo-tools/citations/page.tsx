@@ -4,12 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Quote, Loader2, AlertTriangle, Search, ExternalLink } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
-import { getDataForSeoKey, getSerpCreds } from "@/lib/seo/keys";
+import { getDataForSeoKey, getSeoGenCreds, getSerpCreds, aiCredsReady } from "@/lib/seo/keys";
 import { useSerpReadiness } from "@/lib/seo/useSerpReadiness";
 import { EMOTIONS, type Citation } from "@/lib/seo/contentAnalysisShapes";
 
 const card = "panel";
-const POL: Record<string, string> = { positive: "var(--color-accent-green)", neutral: "var(--color-accent-orange)", negative: "var(--color-accent-red)" };
+const POL: Record<string, string> = { positive: "var(--color-accent-green)", neutral: "var(--color-accent-orange)", negative: "var(--color-accent-red)", unknown: "var(--color-text-tertiary)" };
+
+/** What the route reports about the analysis it actually ran (absent for DataForSEO). */
+interface AnalysisInfo {
+  provider?: string;
+  model?: string;
+  analyzed?: number;
+  unclear?: number;
+  unanalysed?: number;
+  scraped?: number;
+  error?: string;
+}
 const EM_KEY: Record<string, string> = { anger: "seoEmAnger", happiness: "seoEmHappiness", love: "seoEmLove", sadness: "seoEmSadness", share: "seoEmShare", fun: "seoEmFun" };
 
 export default function CitationsPage() {
@@ -17,13 +28,17 @@ export default function CitationsPage() {
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [data, setData] = useState<{ total: number; items: Citation[]; sentimentAvailable?: boolean; source?: string } | null>(null);
+  const [data, setData] = useState<{ total: number; items: Citation[]; sentimentAvailable?: boolean; source?: string; analysis?: AnalysisInfo } | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const dfsKey = mounted ? getDataForSeoKey() : "";
   const serpCreds = mounted ? getSerpCreds() : { provider: "", apiKey: "" };
   const serpReady = useSerpReadiness(serpCreds);
+  // Sentiment without DataForSEO: SearXNG finds the mentions, the configured chat model reads them.
+  const ai = mounted ? getSeoGenCreds() : { provider: "", apiKey: "", model: "", baseUrl: undefined as string | undefined };
+  const aiReady = mounted && aiCredsReady(ai);
   const canSearch = !!dfsKey || serpReady;
+  const willAnalyze = !dfsKey && serpReady && aiReady;
 
   async function run() {
     setErr(""); setData(null);
@@ -38,8 +53,16 @@ export default function CitationsPage() {
           keyword,
           dfsKey,
           provider: dfsKey ? "dataforseo" : "searxng",
+          aiProvider: ai.provider,
+          aiApiKey: ai.apiKey,
+          // Only a model the user actually chose is forwarded. `getSeoGenCreds()` also returns the
+          // provider default, and on this deployment that default is a reasoning model that spends
+          // a short classification's whole budget thinking — the route picks a task model instead.
+          aiModel: (typeof window !== "undefined" ? localStorage.getItem("seoModel") : "") || undefined,
+          aiBaseUrl: ai.baseUrl || undefined,
           hl: typeof navigator !== "undefined" ? navigator.language.split("-")[0] : undefined,
           limit: 200,
+          maxItems: 24,
         }),
       });
       const d = await res.json();
@@ -49,6 +72,7 @@ export default function CitationsPage() {
         items: d.items || [],
         sentimentAvailable: d.sentimentAvailable !== false,
         source: d.source,
+        analysis: d.analysis,
       });
     } catch (e) { setErr(String((e as Error)?.message ?? e)); }
     setLoading(false);
@@ -81,8 +105,14 @@ export default function CitationsPage() {
       </div>
 
       {mounted && !dfsKey && (
-        <div className={card} style={{ borderColor: canSearch ? "rgba(41,151,255,0.35)" : "rgba(255,159,10,0.35)", background: canSearch ? "rgba(41,151,255,0.06)" : "rgba(255,159,10,0.06)", display: "flex", gap: "10px", alignItems: "center", fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          <AlertTriangle size={18} color={canSearch ? "var(--color-accent-blue)" : "var(--color-accent-orange)"} /> {canSearch ? t("seoCitSerpOnly") : t("seoCitNeedProvider")} <Link href="/settings?tab=serp" style={{ color: "var(--color-accent-blue)" }}>{t("seoSettingsShort")}</Link>
+        <div className={card} style={{
+          borderColor: !canSearch ? "rgba(255,159,10,0.35)" : willAnalyze ? "rgba(41,151,255,0.35)" : "rgba(255,159,10,0.35)",
+          background: !canSearch ? "rgba(255,159,10,0.06)" : willAnalyze ? "rgba(41,151,255,0.06)" : "rgba(255,159,10,0.06)",
+          display: "flex", gap: "10px", alignItems: "center", fontSize: "13px", color: "var(--color-text-secondary)",
+        }}>
+          <AlertTriangle size={18} color={!canSearch || !willAnalyze ? "var(--color-accent-orange)" : "var(--color-accent-blue)"} />
+          {!canSearch ? t("seoCitNeedProvider") : willAnalyze ? t("seoCitAiBanner") : t("seoCitSerpOnlyAi")}
+          <Link href={willAnalyze ? "/settings?tab=serp" : "/settings?tab=ai"} style={{ color: "var(--color-accent-blue)" }}>{t("seoSettingsShort")}</Link>
         </div>
       )}
 
@@ -121,8 +151,20 @@ export default function CitationsPage() {
             </div>
           )}
 
+          {data.analysis && (
+            <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+              {t("seoCitAiSummary")
+                .replace("{analyzed}", String(data.analysis.analyzed ?? 0))
+                .replace("{total}", String(data.items.length))
+                .replace("{model}", data.analysis.model || data.analysis.provider || "AI")
+                .replace("{scraped}", String(data.analysis.scraped ?? 0))}
+              {data.analysis.unclear ? ` · ${t("seoCitAiUnclear").replace("{n}", String(data.analysis.unclear))}` : ""}
+              {data.analysis.unanalysed ? ` · ${t("seoCitAiSkipped").replace("{n}", String(data.analysis.unanalysed))}` : ""}
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "start" }}>
-            {/* emotions — DataForSEO only */}
+            {/* emotions — DataForSEO counters or AI scores, whichever ran */}
             {data.sentimentAvailable !== false && (
               <div className={card}>
                 <div className="tool-section-label" style={{ marginBottom: "12px" }}>{t("seoCitEmotions")}</div>
@@ -175,9 +217,16 @@ export default function CitationsPage() {
                     <span style={{ width: 9, height: 9, borderRadius: "50%", background: POL[c.polarity] || "#888", flexShrink: 0 }} />
                     <a href={c.url} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: "200px", color: "var(--color-text-primary)", fontWeight: 600, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title} <ExternalLink size={11} style={{ display: "inline", verticalAlign: "middle", color: "var(--color-text-tertiary)" }} /></a>
                     {c.topEmotion && <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", color: "var(--color-accent-purple)", background: "rgba(191,90,242,0.12)" }}>{t(EM_KEY[c.topEmotion] as Parameters<typeof t>[0])}</span>}
+                    {typeof c.confidence === "number" && c.polarity !== "unknown" && (
+                      <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "20px", color: "var(--color-text-secondary)", background: "var(--color-bg)" }}>
+                        {t("seoCitConfidence").replace("{n}", String(Math.round(c.confidence * 100)))}
+                      </span>
+                    )}
                     <span style={{ fontSize: "11px", color: "var(--color-text-tertiary)" }}>{c.domain}{c.date ? ` · ${c.date}` : ""}</span>
                   </div>
                   {c.snippet && <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>{c.snippet}</div>}
+                  {c.evidence && <div style={{ marginTop: "5px", fontSize: "11px", color: "var(--color-text-tertiary)", fontStyle: "italic" }}>“{c.evidence}”</div>}
+                  {c.polarity === "unknown" && c.sentimentAvailable && <div style={{ marginTop: "5px", fontSize: "11px", color: "var(--color-text-tertiary)" }}>{t("seoCitNoEvidence")}</div>}
                 </div>
               ))}
             </div>

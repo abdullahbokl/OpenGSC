@@ -55,4 +55,12 @@ export interface Citation {
   /** false when the provider cannot supply sentiment/emotion (SearXNG). */
   sentimentAvailable?: boolean;
   source?: "dataforseo" | "searxng";
+  /** Model confidence 0-1 for an analysed verdict (LLM path). */
+  confidence?: number;
+  /** Verbatim fragment backing the verdict; "" when the model could not judge. */
+  evidence?: string;
+  /** Whether the page actually discusses the brand (LLM path). */
+  brandMentioned?: boolean;
+  /** "<provider>/<model>" that produced the verdict, for display. */
+  analyzedBy?: string;
 }
