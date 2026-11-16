@@ -157,6 +157,16 @@ export async function upsertPlacement(userId: string, externalRef: string, field
     });
     if (!res.ok) return { ok: false, error: `linktracker post ${res.status}` };
     const link = await body<TrackerLink>(res);
+    // The registry creates every row as "pending" by design; a mirror that already knows the
+    // verdict (an outreach win the human confirmed) carries it over in one extra PATCH.
+    if (fields.status && fields.status !== "pending") {
+      const patch = await authedFetch(cfg, `/api/links/${link.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: fields.status }),
+      });
+      if (!patch.ok) return { ok: false, error: `linktracker status patch ${patch.status}` };
+    }
     return { ok: true, id: link.id, created: true };
   } catch (e) {
     return { ok: false, error: String((e as Error)?.message ?? e) };
