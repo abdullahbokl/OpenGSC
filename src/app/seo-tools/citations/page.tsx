@@ -6,7 +6,7 @@ import { Quote, Loader2, AlertTriangle, Search, ExternalLink } from "lucide-reac
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { getDataForSeoKey, getSeoGenCreds, getSerpCreds, aiCredsReady } from "@/lib/seo/keys";
 import { useSerpReadiness } from "@/lib/seo/useSerpReadiness";
-import { EMOTIONS, type Citation } from "@/lib/seo/contentAnalysisShapes";
+import { AI_EMOTIONS, EMOTIONS, type Citation } from "@/lib/seo/contentAnalysisShapes";
 
 const card = "panel";
 const POL: Record<string, string> = { positive: "var(--color-accent-green)", neutral: "var(--color-accent-orange)", negative: "var(--color-accent-red)", unknown: "var(--color-text-tertiary)" };
@@ -18,10 +18,18 @@ interface AnalysisInfo {
   analyzed?: number;
   unclear?: number;
   unanalysed?: number;
+  failedExtraction?: number;
   scraped?: number;
+  cached?: number;
   error?: string;
 }
-const EM_KEY: Record<string, string> = { anger: "seoEmAnger", happiness: "seoEmHappiness", love: "seoEmLove", sadness: "seoEmSadness", share: "seoEmShare", fun: "seoEmFun" };
+const EM_KEY: Record<string, string> = {
+  // DataForSEO's counters
+  anger: "seoEmAnger", happiness: "seoEmHappiness", love: "seoEmLove", sadness: "seoEmSadness", share: "seoEmShare", fun: "seoEmFun",
+  // the AI scale
+  trust: "seoEmTrust", satisfaction: "seoEmSatisfaction", appreciation: "seoEmAppreciation", excitement: "seoEmExcitement",
+  frustration: "seoEmFrustration", disappointment: "seoEmDisappointment", fear: "seoEmFear", concern: "seoEmConcern",
+};
 
 export default function CitationsPage() {
   const { t } = useLanguage();
@@ -30,6 +38,11 @@ export default function CitationsPage() {
   const [err, setErr] = useState("");
   const [data, setData] = useState<{ total: number; items: Citation[]; sentimentAvailable?: boolean; source?: string; analysis?: AnalysisInfo } | null>(null);
   const [mounted, setMounted] = useState(false);
+  // How many mentions one run may analyse. The route caps it; the row exists so a user with 200
+  // results is not silently given 48 without being told why.
+  const [limit, setLimit] = useState(48);
+  const [polFilter, setPolFilter] = useState("");
+  const [langFilter, setLangFilter] = useState("");
   useEffect(() => setMounted(true), []);
   const dfsKey = mounted ? getDataForSeoKey() : "";
   const serpCreds = mounted ? getSerpCreds() : { provider: "", apiKey: "" };
@@ -62,7 +75,7 @@ export default function CitationsPage() {
           aiBaseUrl: ai.baseUrl || undefined,
           hl: typeof navigator !== "undefined" ? navigator.language.split("-")[0] : undefined,
           limit: 200,
-          maxItems: 24,
+          maxItems: limit,
         }),
       });
       const d = await res.json();
@@ -78,24 +91,39 @@ export default function CitationsPage() {
     setLoading(false);
   }
 
+  // AI mode is decided by what the route reported, not by guessing from the data: the two paths
+  // measure different emotion scales, and mixing them would chart numbers that never coexisted.
+  const aiMode = !!data?.analysis?.provider;
+  const emotionKeys: readonly string[] = aiMode ? AI_EMOTIONS : EMOTIONS;
+
   const agg = useMemo(() => {
     const items = data?.items || [];
-    const pol = { positive: 0, neutral: 0, negative: 0 } as Record<string, number>;
-    const emo: Record<string, number> = Object.fromEntries(EMOTIONS.map(e => [e, 0]));
+    const pol = { positive: 0, neutral: 0, negative: 0, unknown: 0 } as Record<string, number>;
+    const emo: Record<string, number> = Object.fromEntries(emotionKeys.map(e => [e, 0]));
     const domains: Record<string, number> = {};
     const byDate: Record<string, number> = {};
     items.forEach(c => {
       pol[c.polarity] = (pol[c.polarity] || 0) + 1;
-      EMOTIONS.forEach(e => { emo[e] += Number(c.emotions?.[e] || 0); });
+      const src = (aiMode ? (c.aiEmotions || {}) : (c.emotions || {})) as Record<string, number>;
+      emotionKeys.forEach(e => { emo[e] += Number(src[e] || 0); });
       if (c.domain) domains[c.domain] = (domains[c.domain] || 0) + 1;
       if (c.date) { const m = c.date.slice(0, 7); byDate[m] = (byDate[m] || 0) + 1; }
     });
+    // Counters that must add up to the list length. "Pending" is never folded into "unclear":
+    // one means the model read the page and found nothing, the other means it never read it.
+    const classified = items.filter(c => c.analysisStatus === "classified").length;
+    const unclear = items.filter(c => c.analysisStatus === "unclear").length;
+    const pending = items.filter(c => !c.analysisStatus).length;
     const topDomains = Object.entries(domains).sort((a, b) => b[1] - a[1]).slice(0, 10);
     const trend = Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0]));
     const emoMax = Math.max(1, ...Object.values(emo));
     const trendMax = Math.max(1, ...trend.map(([, n]) => n));
-    return { pol, emo, emoMax, topDomains, trend, trendMax, n: items.length };
-  }, [data]);
+    const languages = [...new Set(items.map(c => c.language).filter(Boolean) as string[])].sort();
+    const shown = items.filter(c =>
+      (!polFilter || c.polarity === polFilter) &&
+      (!langFilter || c.language === langFilter));
+    return { pol, emo, emoMax, topDomains, trend, trendMax, n: items.length, classified, unclear, pending, languages, shown };
+  }, [data, aiMode, emotionKeys, polFilter, langFilter]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
@@ -123,6 +151,14 @@ export default function CitationsPage() {
             {loading ? <Loader2 size={15} className="spin" /> : <Search size={15} />} {t("seoCitRun")}
           </button>
         </div>
+        {!dfsKey && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", fontSize: "12px", color: "var(--color-text-secondary)" }}>
+            <label htmlFor="cit-limit">{t("seoCitLimit")}</label>
+            <select id="cit-limit" className="tool-input" style={{ width: "auto", padding: "5px 8px" }} value={limit} onChange={e => setLimit(Number(e.target.value))}>
+              {[24, 48, 96, 150].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       {err && <div className={card} style={{ borderColor: "rgba(255,69,58,0.35)", background: "rgba(255,69,58,0.06)", color: "var(--color-accent-red)", fontSize: "13px", display: "flex", gap: "8px", alignItems: "center" }}><AlertTriangle size={16} /> {err}</div>}
@@ -152,14 +188,31 @@ export default function CitationsPage() {
           )}
 
           {data.analysis && (
-            <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
-              {t("seoCitAiSummary")
-                .replace("{analyzed}", String(data.analysis.analyzed ?? 0))
-                .replace("{total}", String(data.items.length))
-                .replace("{model}", data.analysis.model || data.analysis.provider || "AI")
-                .replace("{scraped}", String(data.analysis.scraped ?? 0))}
-              {data.analysis.unclear ? ` · ${t("seoCitAiUnclear").replace("{n}", String(data.analysis.unclear))}` : ""}
-              {data.analysis.unanalysed ? ` · ${t("seoCitAiSkipped").replace("{n}", String(data.analysis.unanalysed))}` : ""}
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {/* Five counters that sum to the list length — a reviewer can check the arithmetic
+                  instead of trusting a sentence. */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {[
+                  { key: "seoCitCountTotal", n: agg.n, color: "var(--color-text-secondary)" },
+                  { key: "seoCitCountClassified", n: agg.classified, color: POL.positive },
+                  { key: "seoCitCountUnclear", n: agg.unclear, color: POL.neutral },
+                  { key: "seoCitCountPending", n: agg.pending, color: "var(--color-text-tertiary)" },
+                  { key: "seoCitCountFailed", n: data.analysis.failedExtraction ?? 0, color: POL.negative },
+                ].map(row => (
+                  <span key={row.key} style={{ fontSize: "11px", padding: "3px 9px", borderRadius: "20px", background: "var(--color-bg)", color: row.color, border: "1px solid var(--color-border)" }}>
+                    {t(row.key as Parameters<typeof t>[0])} <strong style={{ fontSize: "12px" }}>{row.n}</strong>
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                {t("seoCitAiSummary")
+                  .replace("{analyzed}", String(data.analysis.analyzed ?? 0))
+                  .replace("{total}", String(data.items.length))
+                  .replace("{model}", data.analysis.model || data.analysis.provider || "AI")
+                  .replace("{scraped}", String(data.analysis.scraped ?? 0))}
+                {data.analysis.cached ? ` · ${t("seoCitCountCached").replace("{n}", String(data.analysis.cached))}` : ""}
+                {data.analysis.error ? ` · ${data.analysis.error}` : ""}
+              </div>
             </div>
           )}
 
@@ -169,9 +222,9 @@ export default function CitationsPage() {
               <div className={card}>
                 <div className="tool-section-label" style={{ marginBottom: "12px" }}>{t("seoCitEmotions")}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {EMOTIONS.map(e => (
+                  {emotionKeys.map(e => (
                     <div key={e} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "12px", color: "var(--color-text-secondary)", width: "80px", flexShrink: 0 }}>{t(EM_KEY[e] as Parameters<typeof t>[0])}</span>
+                      <span style={{ fontSize: "12px", color: "var(--color-text-secondary)", width: "80px", flexShrink: 0 }}>{EM_KEY[e] ? t(EM_KEY[e] as Parameters<typeof t>[0]) : e}</span>
                       <div style={{ flex: 1, height: "8px", borderRadius: "4px", background: "var(--color-bg)", overflow: "hidden" }}>
                         <div style={{ width: `${(agg.emo[e] / agg.emoMax) * 100}%`, height: "100%", background: "var(--color-accent-purple)" }} />
                       </div>
@@ -209,9 +262,24 @@ export default function CitationsPage() {
 
           {/* citations list */}
           <div className={card}>
-            <div className="tool-section-label" style={{ marginBottom: "12px" }}>{t("seoCitList")} ({agg.n})</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
+              <div className="tool-section-label" style={{ margin: 0 }}>{t("seoCitList")} ({agg.shown.length}/{agg.n})</div>
+              <select className="tool-input" style={{ width: "auto", padding: "4px 8px", fontSize: "12px" }} value={polFilter} onChange={e => setPolFilter(e.target.value)}>
+                <option value="">{t("seoCitFilterAll")}</option>
+                <option value="positive">{t("seoCitPositive")}</option>
+                <option value="neutral">{t("seoCitNeutral")}</option>
+                <option value="negative">{t("seoCitNegative")}</option>
+                <option value="unknown">{t("seoCitCountUnclear")}</option>
+              </select>
+              {aiMode && agg.languages.length > 1 && (
+                <select className="tool-input" style={{ width: "auto", padding: "4px 8px", fontSize: "12px" }} value={langFilter} onChange={e => setLangFilter(e.target.value)}>
+                  <option value="">{t("seoCitFilterAllLangs")}</option>
+                  {agg.languages.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              )}
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {data.items.map((c, i: number) => (
+              {agg.shown.map((c, i: number) => (
                 <div key={i} style={{ padding: "11px 13px", border: "1px solid var(--color-border)", borderRadius: "9px", fontSize: "13px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "9px", marginBottom: "4px", flexWrap: "wrap" }}>
                     <span style={{ width: 9, height: 9, borderRadius: "50%", background: POL[c.polarity] || "#888", flexShrink: 0 }} />
@@ -222,10 +290,21 @@ export default function CitationsPage() {
                         {t("seoCitConfidence").replace("{n}", String(Math.round(c.confidence * 100)))}
                       </span>
                     )}
+                    {c.mixed && <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", color: "var(--color-accent-orange)", background: "rgba(255,159,10,0.12)" }}>{t("seoCitMixed")}</span>}
+                    {c.language && <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 7px", borderRadius: "20px", color: "var(--color-text-tertiary)", border: "1px solid var(--color-border)" }}>{c.language}</span>}
                     <span style={{ fontSize: "11px", color: "var(--color-text-tertiary)" }}>{c.domain}{c.date ? ` · ${c.date}` : ""}</span>
                   </div>
                   {c.snippet && <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>{c.snippet}</div>}
                   {c.evidence && <div style={{ marginTop: "5px", fontSize: "11px", color: "var(--color-text-tertiary)", fontStyle: "italic" }}>“{c.evidence}”</div>}
+                  {c.explanation && <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--color-text-secondary)" }}>{c.explanation}</div>}
+                  <div style={{ marginTop: "4px", display: "flex", gap: "8px", flexWrap: "wrap", fontSize: "10px", color: "var(--color-text-tertiary)" }}>
+                    {c.evidenceSource && c.evidenceSource !== "page" && (
+                      <span style={{ color: POL.neutral }}>
+                        {t("seoCitBasis")} {c.evidenceSource === "title" ? t("seoCitBasisTitle") : t("seoCitBasisSnippet")}
+                      </span>
+                    )}
+                    {!c.analysisStatus && <span>{t("seoCitCountPending")}</span>}
+                  </div>
                   {c.polarity === "unknown" && c.sentimentAvailable && <div style={{ marginTop: "5px", fontSize: "11px", color: "var(--color-text-tertiary)" }}>{t("seoCitNoEvidence")}</div>}
                 </div>
               ))}

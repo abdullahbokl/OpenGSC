@@ -171,11 +171,20 @@ export function judgeOutline(
   opts: { keyword: string; language?: string; country?: string; constraints?: string },
 ): Promise<JudgeOutcome> {
   const secs = Array.isArray(outline?.sections) ? outline.sections : [];
+  // ORDER MATTERS: this object is serialised and then cut at 12000 characters below. With `meta`
+  // first, a 30-section outline's title/description/slug variants filled the budget and every
+  // heading fell past the cut — so the judge received a structure with no headings in it and
+  // rejected a finished, correct outline with "missing outline headings". Headings go first, the
+  // FAQ next, and only the three meta fields a structural review can use are sent at all.
+  //
+  // The meta options are deliberately NOT sent: they are already fitted by code (character bands,
+  // slug rules, footprint) and judging them here only made the structural verdict less reliable.
+  const meta = (outline?.meta ?? {}) as Record<string, unknown>;
   const compact = {
-    meta: outline?.meta ?? {},
     headings: secs.map((s) => ({ level: s?.h_level, heading: s?.heading, words: s?.word_count })),
     // FAQ items are objects with `question`; a bare string is passed through as-is.
     faq: Array.isArray(outline?.faq) ? outline.faq.map((f) => (f as unknown as { question?: unknown })?.question ?? f) : [],
+    meta: { h1: meta.h1, target_word_count: meta.target_word_count, dominant_intent: meta.dominant_intent },
   };
   const langLine = opts.language ? `The headings must be in: ${opts.language}. ` : "";
   // "The structure does not cover what the query asks for" is the outline judge's main rejection,
@@ -186,6 +195,11 @@ export function judgeOutline(
     ? `\nThe author imposed these constraints on this outline. A section missing BECAUSE of them is ` +
       `deliberate, not a coverage gap — judge completeness within them:\n${opts.constraints.trim().slice(0, 2000)}\n`
     : "";
+  // With no sections there is nothing to review: say so plainly instead of spending a model call
+  // to have it report the same thing less precisely.
+  if (!secs.length) {
+    return Promise.resolve({ verdict: "reject", blockers: ["no sections were generated"] } as JudgeOutcome);
+  }
   return callJudge(
     `You are a strict QA reviewer for SEO article outlines. An outline was generated for the ` +
     `search query "${opts.keyword}"${opts.country ? ` (market: ${opts.country})` : ""}. Below is its ` +

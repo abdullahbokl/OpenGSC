@@ -28,6 +28,19 @@ export function pickSerpProvider(stored: unknown, hasKey: (provider: string) => 
   return SEARXNG_PROVIDER_ID;
 }
 
+/**
+ * Server-side default for a payload that carried no provider at all.
+ *
+ * The browser always resolves a provider (`pickSerpProvider`) and sends it with every request, so a
+ * payload without one came from a script, an older job, or an MCP caller. Defaulting those to
+ * "serper" was the server half of the divergence this module exists to remove: on a keyless
+ * installation `serpConfigReady("serper", "")` is false, so a job SearXNG could have served came
+ * back `no_serp_key`. The keyless provider is the only honest default when nothing was chosen.
+ */
+export function serpProviderOrDefault(stored: unknown): string {
+  return String(stored ?? "").trim() || SEARXNG_PROVIDER_ID;
+}
+
 /** True when the provider needs an API key in addition to (or instead of) a host. */
 export function serpProviderNeedsKey(provider: string): boolean {
   return provider !== SEARXNG_PROVIDER_ID;

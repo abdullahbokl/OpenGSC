@@ -6,7 +6,7 @@ import { fetchLLM, fetchLLMDetailed, contentTokens, isLengthCut, CONTENT_TOKENS_
 import { stripModelScratch } from "@/lib/seo/textMetrics";
 import { judgeArticle, judgeOutline } from "@/lib/seo/judge";
 import { runSerp, heuristicIntent, heuristicSiteType } from "@/lib/seo/serp";
-import { serpConfigReady } from "@/lib/seo/serpReadiness";
+import { serpConfigReady, serpProviderOrDefault } from "@/lib/seo/serpReadiness";
 import { enrichKeywords, type KwSource } from "@/lib/seo/keywordSource";
 import { scrapeMany, type ScrapedPage } from "@/lib/seo/scrape";
 import type { EditorialPolicy } from "@/lib/seo/policy";
@@ -28,6 +28,8 @@ import { scrubMarks } from "@/lib/seo/marksScrub";
 import { META_LIMITS, metaLength, type MetaFitItem, type MetaFitResult } from "@/lib/seo/metaLimits";
 import { fitMeta, readMetaBlock, writeMetaBlock } from "@/lib/seo/metaFit";
 import { guardOutlineFootprint } from "@/lib/footprint/guard";
+import { taskModelFor } from "./taskModels";
+import { compactCompetitorPages, CONTEXT_BUDGET_CHARS } from "./competitorContext";
 
 // Language-agnostic "this heading is a FAQ section" test — templates carry "H2: FAQ" and the
 // localization pass renames it («FAQ : Tout savoir…», «Часто задаваемые вопросы»…).
@@ -201,6 +203,8 @@ interface GenBody {
   forbiddenBrands?: string[];
   targetWordCount?: number;
   outlineMaxTokens?: number;
+  /** Character budget for the compacted competitor context. Defaults to CONTEXT_BUDGET_CHARS. */
+  contextBudgetChars?: number;
   temperature?: number;
   narration?: string;
   pageGoal?: string;
@@ -684,6 +688,65 @@ async function fitOutlineMetaOptions(outline: Record<string, unknown>, ctx: {
 }
 
 // ─── Outline (structure) ─────────────────────────────────────────────────────────
+/**
+ * Second call that supplies only the tail a cut-off response never reached.
+ *
+ * Cheaper and far more reliable than regenerating the whole outline: the head call already produced
+ * the sections, and asking again for them risks a different (or equally truncated) structure. The
+ * merge only fills fields that are actually missing, so a model that answers with a stale section
+ * list cannot overwrite good work.
+ */
+async function repairOutlineTail(
+  outline: Outline,
+  args: { keyword: string; language: string; country: string; provider: string; apiKey: string; model?: string; baseUrl?: string },
+): Promise<{ outline: Outline; filled: string[] }> {
+  const hasArray = (v: unknown) => Array.isArray(v) && v.length > 0;
+  const hasEntity = !!outline.entity_analysis && typeof outline.entity_analysis === "object"
+    && Object.keys(outline.entity_analysis as Record<string, unknown>).length > 0;
+  const missing = [
+    !hasArray(outline.sub_intents) ? "sub_intents" : "",
+    !hasArray(outline.faq) ? "faq" : "",
+    !hasEntity ? "entity_analysis" : "",
+  ].filter(Boolean);
+  if (!missing.length) return { outline, filled: [] };
+
+  const headings = (Array.isArray(outline.sections) ? outline.sections : [])
+    .map((s) => `${s.h_level} ${s.heading}`)
+    .slice(-14);
+  const prompt = [
+    `The outline below for "${args.keyword}" (${args.language}/${args.country}) was cut off.`,
+    "Write ONLY the missing JSON fields — no sections, no prose.",
+    `Missing fields: ${missing.join(", ")}.`,
+    "Schema:",
+    '{"sub_intents":[{"intent":"","section":"H3 ...","coverage":"","word_count":"100+","entities":[""]}],',
+    ` "faq":[{"question":"","answer_guideline":""}],`,
+    ` "entity_analysis":{"content_strategy":{},"primary_entity":{},"supporting_entities":[],"keyword_strategy":{},"visual_elements":[]}}`,
+    "Return 8-12 sub_intents, 3-5 FAQ questions in the page language, and a compact entity_analysis.",
+    "Reply with JSON only.",
+    "",
+    `Existing section headings (do not repeat them): ${JSON.stringify(headings)}`,
+  ].join("\n");
+
+  const res = await fetchLLMDetailed(prompt, args.provider, args.apiKey, 9000, args.model, args.baseUrl, 0);
+  const parsed = extractJsonDetailed<Record<string, unknown>>(res.text);
+  if (!parsed.data) return { outline, filled: [] };
+  const merged: Outline = { ...outline };
+  const filled: string[] = [];
+  if (missing.includes("sub_intents") && hasArray(parsed.data.sub_intents)) {
+    merged.sub_intents = parsed.data.sub_intents as OutlineSubIntent[];
+    filled.push("sub_intents");
+  }
+  if (missing.includes("faq") && hasArray(parsed.data.faq)) {
+    merged.faq = parsed.data.faq as OutlineFaqItem[];
+    filled.push("faq");
+  }
+  if (missing.includes("entity_analysis") && parsed.data.entity_analysis) {
+    merged.entity_analysis = parsed.data.entity_analysis;
+    filled.push("entity_analysis");
+  }
+  return { outline: merged, filled };
+}
+
 export async function genOutline(b: GenBody): Promise<GenResult> {
   const keyword = String(b.keyword ?? "").trim();
   if (!keyword) return { ok: false, error: "no_keyword" };
@@ -695,27 +758,43 @@ export async function genOutline(b: GenBody): Promise<GenResult> {
   if (!apiKey) return { ok: false, error: "no_ai_key" };
 
   const competitors: CompetitorInput[] = Array.isArray(b.competitors) ? b.competitors : [];
-  if (!competitors.length && serpConfigReady(String(b.serpProvider || "serper"), b.serpKey) && b._autoFetched !== true) {
+  if (!competitors.length && serpConfigReady(serpProviderOrDefault(b.serpProvider), b.serpKey) && b._autoFetched !== true) {
     return genOutlineAuto({ ...b, _autoFetched: true });
   }
   let model = b.model ? String(b.model) : undefined;
   let baseUrl = b.aiBaseUrl ? String(b.aiBaseUrl) : undefined;
+  // Task-scoped default. An explicit `model` (seoModel / seoTaskModel_outline) still wins; when it
+  // is a reasoning model that cannot finish a structured answer, the fallback further below swaps
+  // to THIS model rather than failing the job. See taskModels.ts for the measurements.
+  const taskOutlineModel = taskModelFor(provider, "outline");
+  const configuredModel = model;
+  if (!model && taskOutlineModel) model = taskOutlineModel;
+  // The auxiliary passes — per-source extraction, fact scrub, structure expansion, heading
+  // localisation, FAQ backfill — are all SHORT structured JSON tasks. They inherit the outline's
+  // model only when no task model exists: with a reasoning model they cost minutes and return
+  // nothing, which is precisely how a "10 competitors takes forever" bug presents itself.
+  const auxModel = taskOutlineModel || model;
 
   // MAP stage: extract compact facts per source (parallel) before assembling the outline.
   if (b.mapExtract !== false && competitors.length) {
     b.__onProgress?.(10, "map");
-    try { await mapExtractFacts(competitors, keyword, String(b.country ?? "us"), provider, apiKey, model, baseUrl); } catch { /* fall back to raw text grounding */ }
+    try { await mapExtractFacts(competitors, keyword, String(b.country ?? "us"), provider, apiKey, auxModel, baseUrl); } catch { /* fall back to raw text grounding */ }
     b.__onProgress?.(22, "outline");
   }
 
   // Casino RAG: pull verified entity facts (slots/casinos/providers) from the knowledge base.
   const rag = b.useRag ? await findRagFacts(keyword) : null;
 
+  const compacted = compactCompetitorPages(
+    competitors,
+    Math.max(4000, Math.min(80000, Number(b.contextBudgetChars) || CONTEXT_BUDGET_CHARS)),
+  );
+
   const prompt = buildOutlinePrompt({
     keyword,
     language: String(b.language ?? "en"),
     country: String(b.country ?? "us"),
-    competitors,
+    competitors: compacted.items,
     policy: b.policy,
     paa: b.paa,
     related: b.related,
@@ -762,7 +841,14 @@ export async function genOutline(b: GenBody): Promise<GenResult> {
   // fails to report usage on long generations but serves short ones fine cannot be told apart
   // from a broken model without varying exactly this number, and recompiling to change a constant
   // makes that a deploy per experiment.
-  const OUTLINE_TOKENS = Math.max(4000, Math.min(64000, Number(b.outlineMaxTokens) || 24000));
+  // The budget has to match the SCHEMA, not just the section count. With enrichment on (the
+  // default) the prompt asks for a lean skeleton and the sections are deepened afterwards; with
+  // enrichment off the same call must return copywriter_notes, entity_connections and
+  // visual_elements for every section at once, which is several times the output for the same
+  // number of headings. Asking for that under the lean budget is how "enrichment off" produced a
+  // response cut in the middle of a string — invalid JSON, and a message that blamed the parser.
+  const schemaIsHeavy = b.enrich === false;
+  const OUTLINE_TOKENS = Math.max(4000, Math.min(64000, Number(b.outlineMaxTokens) || (schemaIsHeavy ? 40000 : 24000)));
   const OUTLINE_TOKENS_RETRY = Math.min(64000, Math.round(OUTLINE_TOKENS * 1.35));
   const wantSections = targetSectionCount(Number(b.targetWordCount) || 0);
   const sectionCount = (o: Outline | null) => (Array.isArray(o?.sections) ? o.sections.length : 0);
@@ -783,26 +869,101 @@ export async function genOutline(b: GenBody): Promise<GenResult> {
   if (!outline) {
     // Retry deterministically: if sampling is what mangled the JSON, repeating at the same
     // temperature just rolls the same dice again.
-    res = await fetchLLMDetailed(prompt + (raw ? "\n\nПредыдущий ответ не распарсился. Верни ТОЛЬКО валидный JSON, без текста и без markdown-обёрток." : ""), provider, apiKey, OUTLINE_TOKENS, model, baseUrl, outlineTemp === undefined ? undefined : 0);
-    raw = res.text;
-    parsed0 = extractJsonDetailed<Outline>(raw);
-    outline = parsed0.data;
-    wasCutOff = !!outline && cutOff(parsed0.repaired, res.finishReason);
+    //
+    // One failure this must NOT be spent on: an EMPTY completion at the token ceiling. That is the
+    // reasoning-model signature — the model thought until the budget ran out and never started
+    // answering — so the retry repeats a 2-3 minute call that cannot succeed, at the same size.
+    // The model switch below is the fix for it; it is skipped here and reached directly.
+    const reasoningBurn = !raw && /finish_reason:? ?length|reasoning model|empty completion/i.test(res.error ?? "");
+    const canSwapModel = !!taskOutlineModel && taskOutlineModel !== model;
+    if (reasoningBurn && canSwapModel) {
+      console.error(`[outline] ${model} returned no text at all (reasoning burned the budget) — switching to ${taskOutlineModel} instead of retrying`);
+    } else {
+      res = await fetchLLMDetailed(prompt + (raw ? "\n\nПредыдущий ответ не распарсился. Верни ТОЛЬКО валидный JSON, без текста и без markdown-обёрток." : ""), provider, apiKey, OUTLINE_TOKENS, model, baseUrl, outlineTemp === undefined ? undefined : 0);
+      raw = res.text;
+      parsed0 = extractJsonDetailed<Outline>(raw);
+      outline = parsed0.data;
+      wasCutOff = !!outline && cutOff(parsed0.repaired, res.finishReason);
+    }
   } else if (wasCutOff) {
     // Repeating the request at the SAME ceiling would reproduce the same truncation — the point
     // of this retry is the higher ceiling, not the reroll. Whichever attempt is more complete
     // wins, so a second truncation can only ever gain sections, never lose them.
-    console.error(`[outline] response cut off (finish_reason: ${res.finishReason ?? "n/a"}, sections: ${sectionCount(outline)}/${wantSections}) — retrying with a larger token budget`);
-    try {
-      const res2 = await fetchLLMDetailed(prompt, provider, apiKey, OUTLINE_TOKENS_RETRY, model, baseUrl, outlineTemp);
-      const parsed2 = extractJsonDetailed<Outline>(res2.text);
-      if (parsed2.data) {
-        const cut2 = cutOff(parsed2.repaired, res2.finishReason);
-        if (!cut2 || sectionCount(parsed2.data) > sectionCount(outline)) {
-          res = res2; raw = res2.text; outline = parsed2.data; wasCutOff = cut2;
+    //
+    // But when a task model exists and differs, that bigger ask is the wrong move: it is the same
+    // model that just failed, at a larger price and a longer wait. The tail repair and the model
+    // switch below are both cheaper and likelier to end with a whole outline.
+    const canSwapModel = !!taskOutlineModel && taskOutlineModel !== model;
+    if (!canSwapModel) {
+      console.error(`[outline] response cut off (finish_reason: ${res.finishReason ?? "n/a"}, sections: ${sectionCount(outline)}/${wantSections}) — retrying with a larger token budget`);
+      try {
+        const res2 = await fetchLLMDetailed(prompt, provider, apiKey, OUTLINE_TOKENS_RETRY, model, baseUrl, outlineTemp);
+        const parsed2 = extractJsonDetailed<Outline>(res2.text);
+        if (parsed2.data) {
+          const cut2 = cutOff(parsed2.repaired, res2.finishReason);
+          if (!cut2 || sectionCount(parsed2.data) > sectionCount(outline)) {
+            res = res2; raw = res2.text; outline = parsed2.data; wasCutOff = cut2;
+          }
         }
-      }
-    } catch { /* keep the first attempt; the repair passes below still run */ }
+      } catch { /* keep the first attempt; the repair passes below still run */ }
+    } else {
+      console.error(`[outline] response cut off (finish_reason: ${res.finishReason ?? "n/a"}, sections: ${sectionCount(outline)}/${wantSections}) — repairing the tail, then switching to ${taskOutlineModel}`);
+    }
+  }
+
+  // TRUNCATION REPAIR — in two escalating steps, because "cut off" is not the same failure twice.
+  //
+  // 1) The head reached the ceiling mid-answer: ask again for ONLY the missing tail (sub_intents,
+  //    faq, entity_analysis). Cheap, and it cannot damage the sections already produced.
+  // 2) The sections themselves are far too few (the signature of a reasoning model that spent the
+  //    budget thinking): redo the whole call on the task-scoped model, which was measured to finish.
+  //    The user's explicit model is still tried FIRST — this only rescues the job it could not finish.
+  let filledTail: string[] = [];
+  let fellBackModel: string | undefined;
+  if (outline && wasCutOff) {
+    try {
+      const repaired = await repairOutlineTail(outline, {
+        keyword, language: String(b.language ?? "en"), country: String(b.country ?? "us"),
+        provider, apiKey, model: auxModel, baseUrl,
+      });
+      outline = repaired.outline;
+      filledTail = repaired.filled;
+      // A tail filled in full means the only thing that was missing was the tail.
+      const nowComplete = Array.isArray(outline.faq) && outline.faq.length > 0
+        && !!outline.entity_analysis
+        && Array.isArray(outline.sub_intents) && outline.sub_intents.length > 0;
+      if (nowComplete) wasCutOff = false;
+    } catch { /* the model-switch below still runs */ }
+  }
+
+  const tooFewSections = !!outline && sectionCount(outline) < Math.min(8, wantSections);
+  let swapError: string | undefined;
+  if ((!outline || wasCutOff || tooFewSections) && taskOutlineModel && taskOutlineModel !== model) {
+    console.error(`[outline] ${configuredModel ?? "(default)"} could not finish (sections: ${sectionCount(outline)}/${wantSections}, cut off: ${wasCutOff}) — retrying on the task model ${taskOutlineModel}`);
+    // Two attempts, because the one time this matters is the one time the provider answers 429 or
+    // closes the stream: the swap is the last thing standing between a paid-for scrape and an
+    // error message, so a transient failure deserves one more ask rather than a lost job.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const resSwap = await fetchLLMDetailed(prompt, provider, apiKey, OUTLINE_TOKENS_RETRY, taskOutlineModel, baseUrl, outlineTemp);
+        const parsedSwap = extractJsonDetailed<Outline>(resSwap.text);
+        if (parsedSwap.data && sectionCount(parsedSwap.data) > sectionCount(outline)) {
+          const cutSwap = cutOff(parsedSwap.repaired, resSwap.finishReason);
+          // Accept the swap only when it is genuinely better: more sections, or whole AND complete.
+          const swapComplete = !cutSwap && Array.isArray(parsedSwap.data.faq) && parsedSwap.data.faq.length > 0;
+          if (swapComplete || sectionCount(parsedSwap.data) > sectionCount(outline)) {
+            res = resSwap; raw = resSwap.text; outline = parsedSwap.data;
+            wasCutOff = cutSwap; filledTail = []; model = taskOutlineModel;
+            fellBackModel = taskOutlineModel;
+            swapError = undefined;
+            break;
+          }
+        }
+        swapError = resSwap.error
+          ?? (parsedSwap.data ? `only ${sectionCount(parsedSwap.data)} sections` : "no parseable output");
+      } catch (e) { swapError = String((e as Error)?.message ?? e); }
+      if (attempt === 0) console.error(`[outline] task model ${taskOutlineModel} failed (${swapError}) — one more attempt`);
+    }
   }
   // PROVIDER FALLBACK: the outline is the one step whose failure wastes everything before it —
   // the SERP call, the scrape and the per-source fact extraction are all already paid for by the
@@ -838,10 +999,23 @@ export async function genOutline(b: GenBody): Promise<GenResult> {
     }
   }
 
+  // From here on every pass is a short structured call (scrub, expand, localise, FAQ backfill,
+  // section enrichment): pin them to the auxiliary model so none of them re-enters the reasoning
+  // model's budget problem. The head call above has already produced the structure.
+  //
+  // Skipped when a different PROVIDER answered — the task model is an Ollama id and means nothing
+  // to Anthropic or OpenAI, so a provider fallback keeps the model that provider was given.
+  if (!fellBackTo) model = auxModel;
+
   // Three genuinely different failures, three different messages. They used to collapse into
   // "generation_failed" / "parse_failed", which said nothing about which one had happened.
   if (!outline) {
-    if (raw == null) return { ok: false, error: res.error ?? "generation_failed" };
+    if (raw == null) {
+      // Named together: "the model returned nothing" is only actionable if it says which model and
+      // what the fallback did, otherwise the next person repeats exactly this investigation.
+      const head = res.error ?? "generation_failed";
+      return { ok: false, error: swapError ? `${head}; task model ${taskOutlineModel}: ${swapError}` : head };
+    }
     // Reaching here means the model DID return text that is not JSON — quote the head of it,
     // because that is the one piece of evidence needed to tell a wrapped//chatty answer apart
     // from a truncated one, and it is otherwise never persisted anywhere.
@@ -886,6 +1060,10 @@ export async function genOutline(b: GenBody): Promise<GenResult> {
   // whole again, but "this outline was rebuilt from a cut-off answer" is exactly the context
   // needed when someone later asks why a generation looks thin, and it costs one boolean.
   if (wasCutOff) { outline._truncated = true; meta.truncated = true; }
+  if (filledTail.length) { meta.tail_repaired = filledTail; }
+  if (fellBackModel) { outline._fallback_model = fellBackModel; meta.fallback_model = fellBackModel; }
+  // What the context reduction did — shown in the UI so a thin-looking outline has a visible cause.
+  meta.competitor_context = { ...compacted.stats };
   // Which provider actually wrote this, when it was not the configured one. Without it a
   // successful job hides the fact that the primary provider is broken, and nobody fixes it.
   if (fellBackTo) { outline._fallback_provider = fellBackTo; meta.fallback_provider = fellBackTo; }
@@ -1499,10 +1677,10 @@ export async function genText(b: GenBody): Promise<GenResult> {
 
   let sources: { title: string; snippet: string; url: string; domain: string }[] = [];
   let effMode: "off" | "facts" | "cited" = sourceMode;
-  if (sourceMode !== "off" && serpConfigReady(String(b.serpProvider || "serper"), b.serpKey) && keyword) {
+  if (sourceMode !== "off" && serpConfigReady(serpProviderOrDefault(b.serpProvider), b.serpKey) && keyword) {
     b.__onProgress?.(8, "serp");
     try {
-      const serp = await runSerp(String(b.serpProvider || "serper"), String(b.serpKey), keyword, { gl: b.gl, hl: b.hl, num: 10, engine: "google", baseUrl: b.serpBaseUrl ? String(b.serpBaseUrl) : undefined });
+      const serp = await runSerp(serpProviderOrDefault(b.serpProvider), String(b.serpKey), keyword, { gl: b.gl, hl: b.hl, num: 10, engine: "google", baseUrl: b.serpBaseUrl ? String(b.serpBaseUrl) : undefined });
       const top = (serp.results || []).slice(0, Math.max(1, Math.min(10, Number(b.scrapeCount ?? 6))));
       let scraped: ScrapedPage[] = [];
       try { scraped = await scrapeMany(top.map(r => r.url), b.firecrawlKey ? String(b.firecrawlKey) : undefined, 4); } catch {}
@@ -2073,9 +2251,9 @@ export async function genAnalysis(b: GenBody): Promise<GenResult> {
 export async function genOutlineAuto(b: GenBody): Promise<GenResult> {
   const keyword = String(b.keyword ?? "").trim();
   if (!keyword) return { ok: false, error: "no_keyword" };
-  if (!serpConfigReady(String(b.serpProvider || "serper"), b.serpKey)) return { ok: false, error: "no_serp_key" };
+  if (!serpConfigReady(serpProviderOrDefault(b.serpProvider), b.serpKey)) return { ok: false, error: "no_serp_key" };
   b.__onProgress?.(8, "serp");
-  const serp = await runSerp(String(b.serpProvider || "serper"), String(b.serpKey), keyword, {
+  const serp = await runSerp(serpProviderOrDefault(b.serpProvider), String(b.serpKey), keyword, {
     gl: b.gl ?? b.country, hl: b.hl ?? b.language, num: 10, engine: "google",
     baseUrl: b.serpBaseUrl ? String(b.serpBaseUrl) : undefined,
   });
@@ -2149,8 +2327,8 @@ export async function genCluster(b: GenBody): Promise<GenResult> {
     .map((k) => String(k).trim().toLowerCase()).filter(Boolean))].slice(0, 1000) as string[];
   if (keywords.length < 2) return { ok: false, error: "no_keywords" };
   const serpKey = String(b.serpKey ?? "");
-  if (!serpConfigReady(String(b.serpProvider ?? "serper"), serpKey)) return { ok: false, error: "no_serp_key" };
-  const provider = String(b.serpProvider ?? "serper");
+  if (!serpConfigReady(serpProviderOrDefault(b.serpProvider), serpKey)) return { ok: false, error: "no_serp_key" };
+  const provider = serpProviderOrDefault(b.serpProvider);
   const serpBaseUrl = b.serpBaseUrl ? String(b.serpBaseUrl) : undefined;
   const gl = String(b.gl ?? "us"), hl = String(b.hl ?? "en");
   const threshold = Math.max(2, Math.min(6, Number(b.threshold ?? 3)));

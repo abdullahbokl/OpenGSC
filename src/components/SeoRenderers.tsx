@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Wand2, Download, Loader2, ChevronDown, ChevronRight, BarChart3, LayoutTemplate, Globe } from "lucide-react";
+import { FileText, Wand2, Download, Loader2, ChevronDown, ChevronRight, BarChart3, LayoutTemplate, Globe, AlertTriangle } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { wireframeToMarkdown } from "@/lib/seo/outlineFormat";
 
@@ -27,6 +27,12 @@ interface OutlineMeta {
   title_options: string[];
   description_options: string[];
   slug_options: string[];
+  /** True when the answer was salvaged from a cut-off response and never completed. */
+  truncated?: boolean;
+  /** The model that actually finished the outline, when it was not the configured one. */
+  fallback_model?: string;
+  /** What the competitor context reduction did before the call. */
+  competitor_context?: Record<string, number>;
 }
 interface SubIntent { intent: string; section?: string; word_count?: string | number; coverage?: string }
 interface WeightedEntity { name: string; weight?: number }
@@ -386,6 +392,31 @@ export function OutlineView({ outline, onGenText, genTextLoading }: { outline: O
           {onGenText && <button onClick={onGenText} disabled={genTextLoading} style={btnPurple}>{genTextLoading ? <Loader2 size={14} className="spin" /> : <Wand2 size={14} />} {t("seoGenText")}</button>}
         </div>
       </div>
+      {/* What the generation actually did. A truncated outline used to look identical to a whole
+          one; these two lines are the difference between "the model chose 10 sections" and "the
+          model was cut off" — and between "your model worked" and "your model was swapped out". */}
+      {(meta.truncated || meta.fallback_model || meta.competitor_context) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
+          {meta.truncated && (
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "12px", padding: "8px 11px", borderRadius: "8px", color: "var(--color-accent-orange)", background: "rgba(255,159,10,0.08)", border: "1px solid rgba(255,159,10,0.3)" }}>
+              <AlertTriangle size={14} /> {t("seoOutlineTruncated")}
+            </div>
+          )}
+          {meta.fallback_model && (
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "12px", color: "var(--color-text-secondary)" }}>
+              <AlertTriangle size={14} color="var(--color-accent-blue)" /> {t("seoOutlineModelSwap").replace("{model}", String(meta.fallback_model))}
+            </div>
+          )}
+          {meta.competitor_context && (
+            <div style={{ fontSize: "11px", color: "var(--color-text-tertiary)" }}>
+              {t("seoOutlineContext")
+                .replace("{kept}", String((meta.competitor_context as Record<string, number>).sources_kept ?? 0))
+                .replace("{in}", String((meta.competitor_context as Record<string, number>).sources_in ?? 0))
+                .replace("{chars}", String((meta.competitor_context as Record<string, number>).chars_out ?? 0))}
+            </div>
+          )}
+        </div>
+      )}
       <OutlineStructure outline={outline} />
       <OutlineEntities outline={outline} />
     </div>

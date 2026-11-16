@@ -45,6 +45,7 @@ export async function POST(req: Request) {
         scrape: b.scrape === undefined ? undefined : Number(b.scrape),
         maxItems: b.maxItems === undefined ? undefined : Number(b.maxItems),
         maxTokens: b.maxTokens === undefined ? undefined : Number(b.maxTokens),
+        concurrency: b.concurrency === undefined ? undefined : Number(b.concurrency),
       },
     );
     return NextResponse.json({
@@ -58,7 +59,9 @@ export async function POST(req: Request) {
         analyzed: analysis.analyzed,
         unclear: analysis.unclear,
         unanalysed: analysis.unanalysed,
+        failedExtraction: analysis.failedExtraction,
         scraped: analysis.scraped,
+        cached: analysis.cached,
         error: analysis.error,
       },
     });

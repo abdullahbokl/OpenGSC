@@ -9,6 +9,19 @@ export type Polarity = "positive" | "neutral" | "negative";
 export const EMOTIONS = ["anger", "happiness", "love", "sadness", "share", "fun"] as const;
 export type Emotion = typeof EMOTIONS[number];
 
+/**
+ * Emotions the AI path scores.
+ *
+ * Deliberately a different list from DataForSEO's six (\`EMOTIONS\`): those are that provider's fixed
+ * counter names, and inventing numbers for them would make the two paths look comparable when they
+ * are not. These are the ones a review actually expresses.
+ */
+export const AI_EMOTIONS = [
+  "trust", "satisfaction", "appreciation", "excitement",
+  "anger", "frustration", "disappointment", "fear", "concern",
+] as const;
+export type AiEmotion = typeof AI_EMOTIONS[number];
+
 /** The minimal result shape a web search supplies. */
 export interface CitationMention {
   url: string;
@@ -49,7 +62,8 @@ export interface Citation {
   /** "unknown" when the source only supplied mentions and cannot state sentiment. */
   polarity: Polarity | "unknown";
   emotions: Record<Emotion, number>;
-  topEmotion?: Emotion;
+  /** Strongest emotion of whichever scale produced the verdict (DataForSEO or AI). */
+  topEmotion?: Emotion | AiEmotion;
   date: string;
   score: number;
   /** false when the provider cannot supply sentiment/emotion (SearXNG). */
@@ -63,4 +77,25 @@ export interface Citation {
   brandMentioned?: boolean;
   /** "<provider>/<model>" that produced the verdict, for display. */
   analyzedBy?: string;
+  /**
+   * Emotion scores from the AI path, on its own 0-100 scale.
+   *
+   * Kept separate from `emotions` (DataForSEO's fixed six counters) because the two are not the
+   * same measurement: merging them would make a "happiness: 0" from one provider look like a
+   * finding next to a "satisfaction: 70" from the other.
+   */
+  aiEmotions?: Record<string, number>;
+  /** One sentence, in the page's language, on why the verdict was reached. */
+  explanation?: string;
+  /** The text both praised and criticised the subject. */
+  mixed?: boolean;
+  /** How far the row got, so the UI can count pending vs unread instead of implying coverage. */
+  analysisStatus?: "classified" | "unclear" | "not-analysed";
+  /** Language of the evidence ("ar", "en", "ar-en", "ru", "zh"). */
+  language?: string;
+  /**
+   * What the verdict was actually read from: the page body, the search snippet, or the title only
+   * (video pages expose nothing else). A thinner basis is a real limitation, not a detail.
+   */
+  evidenceSource?: "page" | "snippet" | "title";
 }
