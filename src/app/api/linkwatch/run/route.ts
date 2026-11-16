@@ -80,7 +80,7 @@ export async function POST(req: Request) {
           rid(), userId, brand, row.url, row.domain,
           String(row.title ?? ""), "", 0,
           // firstSeen = when *we* saw the mention, not a link-index first-seen date.
-          new Date().toISOString().slice(0, 10), "", "",
+          new Date().toISOString().slice(0, 10), "",
           // No link was verified — dofollow stays at its default but the empty anchor tells the
           // UI this row is a mention, not a confirmed backlink.
           1, new Date().toISOString());
