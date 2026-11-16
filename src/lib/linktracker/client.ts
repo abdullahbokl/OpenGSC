@@ -139,7 +139,7 @@ export async function upsertPlacement(userId: string, externalRef: string, field
       linkType: fields.linkType ?? "",
       particular: fields.particular ?? "",
       notes: externalRef,
-      ...(existing ? {} : { status: fields.status ?? "pending" }),
+      ...(fields.status ? { status: fields.status } : {}),
     };
     if (existing) {
       const res = await authedFetch(cfg, `/api/links/${existing.id}`, {
