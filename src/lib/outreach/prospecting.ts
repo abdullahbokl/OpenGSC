@@ -14,7 +14,7 @@
 import { prisma } from "@/lib/prisma";
 import { normalizeProspectDomain } from "./types";
 import { resolveAiCreds } from "@/lib/mcp/shared";
-import { fetchLLM } from "@/lib/llm";
+import { fetchLLMDetailed } from "@/lib/llm";
 import { searxngSearch } from "@/lib/seo/searxng";
 
 export type DiscoveryPattern = "resource" | "listicle" | "guest_post" | "article";
@@ -145,6 +145,9 @@ export interface DiscoveryResult {
   droppedCompetitors: number;
   prospects: { id: string; domain: string; qualScore: number; qualReason: string }[];
   error?: string;
+  /** Why the AI pass degraded to unscored, when it did — the operator sees the cause
+   *  instead of a silent "qualification_unavailable" on every row. */
+  aiError?: string;
 }
 
 const MAX_PROSPECTS_PER_RUN = 10;
@@ -185,6 +188,7 @@ export async function discoverProspects(userId: string, input: DiscoveryInput): 
   let qualifications: Qualification[];
   try {
     const creds = await resolveAiCreds(userId);
+    if (!creds.aiApiKey && creds.aiProvider !== "ollama") throw new Error("no_ai_key_configured");
     const prompt = [
       "You are qualifying backlink-outreach prospects. Given a keyword, our target asset, and",
       "candidate web pages found by a search engine, decide for each candidate:",
@@ -202,9 +206,13 @@ export async function discoverProspects(userId: string, input: DiscoveryInput): 
       "",
       'Answer with ONLY a JSON array: [{"url":"...","score":7,"reason":"...","competitor":false}, ...]',
     ].filter(Boolean).join("\n");
-    const raw = await fetchLLM(prompt, creds.aiProvider, creds.aiApiKey, 2048, creds.model, creds.aiBaseUrl, 0.2);
-    qualifications = parseQualification(raw, candidates);
-  } catch {
+    const detail = await fetchLLMDetailed(prompt, creds.aiProvider, creds.aiApiKey, 2048, creds.model, creds.aiBaseUrl, 0.2);
+    qualifications = parseQualification(detail.text, candidates);
+    if (!qualifications.some(q => q.reason !== "qualification_unavailable")) {
+      out.aiError = detail.error ?? "model answer could not be parsed";
+    }
+  } catch (e) {
+    out.aiError = String((e as Error)?.message ?? e);
     qualifications = parseQualification(null, candidates);
   }
 
@@ -238,9 +246,14 @@ async function saveProspect(userId: string, input: DiscoveryInput, c: Candidate,
     notes: q.reason,
   });
   if (result.created) {
+    // A prospect the AI actually scored at/above the threshold arrives as `qualified` —
+    // draftable right away. Unscored ones (AI unreachable) stay `discovered`: a human look
+    // is the honest next step when the machine could not judge.
+    const scored = q.reason !== "qualification_unavailable" && q.reason !== "not_scored_by_model" && q.score >= QUALIFY_THRESHOLD;
     await prisma.outreachProspect.update({
       where: { id: result.prospect.id },
       data: {
+        ...(scored ? { stage: "qualified" } : {}),
         discoverySource: "searxng",
         discoveryQuery: input.keyword,
         discoveredAt: new Date(),
