@@ -3,7 +3,7 @@
 // Client helpers for GEO audits. An audit runs server-side and persists its result,
 // so the user can close the tab and re-open it later from the recent list.
 import type { GeoReport } from "@/lib/seo/geo";
-import { getAparserCreds as getAparserConnection } from "@/lib/seo/keys";
+import { getAparserCreds as getAparserConnection, getTaskCreds } from "@/lib/seo/keys";
 
 export interface GeoAuditRec {
   id: string;
@@ -63,7 +63,23 @@ function hasAparserCreds(): boolean {
 }
 
 const GEO_ENGINE_KEY = "geoEngine";
-export type GeoEngineChoice = "openai" | "kie" | "gemini" | "aparser";
+export type GeoEngineChoice = "openai" | "kie" | "gemini" | "aparser" | "ollama";
+
+/**
+ * The "ollama" engine has no vendor key to check: its stage 1 is the app's own SERP integration
+ * (keyless SearXNG, or the user's Serper key) and stage 2 runs on the user's configured AI
+ * provider through the `utility` task. So "available" means that task resolves to a real
+ * provider + key — the same creds every other mechanical analysis pass in the app uses.
+ */
+export function getOllamaEngineCreds(): { provider: string; apiKey: string; model: string; baseUrl?: string } {
+  return getTaskCreds("utility");
+}
+export function hasOllamaEngine(): boolean {
+  if (typeof window === "undefined") return false;
+  const u = getOllamaEngineCreds();
+  return !!u.provider && !!u.apiKey;
+}
+
 // Which engine to use: an explicit user choice (if that key is still configured), else whichever
 // key is actually present, preferring OpenAI (native web_search) when several are set.
 export function getGeoEngine(): GeoEngineChoice {
@@ -72,11 +88,13 @@ export function getGeoEngine(): GeoEngineChoice {
   const hasKie = !!getKieKeyForGeo();
   const hasGemini = !!getGeminiKeyForGeo();
   const hasAparser = hasAparserCreds();
+  const hasOllama = hasOllamaEngine();
   const stored = localStorage.getItem(GEO_ENGINE_KEY) as GeoEngineChoice | null;
   if (stored === "kie" && hasKie) return "kie";
   if (stored === "gemini" && hasGemini) return "gemini";
   if (stored === "openai" && hasOpenAi) return "openai";
   if (stored === "aparser" && hasAparser) return "aparser";
+  if (stored === "ollama" && hasOllama) return "ollama";
   if (hasOpenAi) return "openai";
   if (hasGemini) return "gemini";
   if (hasKie) return "kie";
@@ -84,6 +102,10 @@ export function getGeoEngine(): GeoEngineChoice {
   // existing user's audits off the engine they have been comparing runs on; it is picked
   // automatically only when nothing else is configured at all.
   if (hasAparser) return "aparser";
+  // Nothing vendor-configured at all: the ollama engine needs no new key (stage 1 is SearXNG,
+  // stage 2 is the provider already configured app-wide), so it is the honest default rather
+  // than "openai" with an empty key slot.
+  if (hasOllama) return "ollama";
   return "openai";
 }
 export function setGeoEngine(e: GeoEngineChoice) {
@@ -91,10 +113,13 @@ export function setGeoEngine(e: GeoEngineChoice) {
 }
 // For "aparser" this returns the instance password: the route treats `apiKey` as the engine's
 // credential whatever it is, and the endpoint travels in `baseUrl` like every other override.
+// The ollama engine returns "" — it has no vendor key, and the run() gate checks the utility
+// creds directly instead.
 export function getGeoApiKey(engine: GeoEngineChoice): string {
   return engine === "kie" ? getKieKeyForGeo()
     : engine === "gemini" ? getGeminiKeyForGeo()
     : engine === "aparser" ? getAparserCreds().password
+    : engine === "ollama" ? ""
     : getOpenAiKey();
 }
 
@@ -127,6 +152,8 @@ export async function startGeoAudit(payload: {
   aparserPreset?: string;
   /** Engine "aparser" only: the instance's thread-count config to run under. */
   aparserConfig?: string;
+  /** Engine "ollama" only: the stage-1 SERP source (SearXNG keyless, or the user's Serper key). */
+  serp?: { provider: "searxng" | "serper"; key: string; baseUrl?: string };
   /** Optional: the user's own page to compare against the cited ones in stage 2. */
   pageUrl?: string;
 }): Promise<{ id?: string; error?: string }> {

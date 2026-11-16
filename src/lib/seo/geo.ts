@@ -20,6 +20,10 @@ import { fetchLLMDetailed } from "@/lib/llm";
 import { defaultModelFor } from "@/lib/providerDefaults";
 import { runGeoAparser, GEO_APARSER_PARSER } from "@/lib/seo/geoAparser";
 import { safeFetch } from "@/lib/security/safeFetch";
+import { runSerp } from "@/lib/seo/serp";
+import { searxngConfigured } from "@/lib/seo/searxng";
+import { scrapeMany } from "@/lib/seo/scrape";
+import { buildOllamaAnswerPrompt, citationsFromAnswer, resolveGeoOllamaRun, type OllamaSource } from "@/lib/seo/geoOllama";
 
 export type GeoResult = { ok: true; data: GeoReport } | { ok: false; error: string };
 
@@ -195,7 +199,15 @@ function buildSearchInput(query: string, language: string, country: string): str
 // installation driving the public ChatGPT surface (lib/seo/aparser.ts). It carries no
 // per-token cost, reports its model rather than accepting one, and answers with sources but
 // not with the search steps that found them.
-export type GeoEngine = "openai" | "kie" | "gemini" | "aparser";
+//
+// "ollama" re-splits the two stages instead of adding a vendor: stage 1 collects REAL search
+// results through the app's own SERP integrations (keyless SearXNG, or the user's Serper key)
+// and opens the top pages with the existing scrape chain; the user's configured AI provider —
+// Ollama Cloud on this install — writes the grounded answer over the numbered source pool and
+// runs the stage-2 analysis. Ollama never searches, and every citation is checked against the
+// collected pool, so nothing can enter the report that the search did not find. This is what
+// lets the tool run without any OpenAI/kie/gemini key at all.
+export type GeoEngine = "openai" | "kie" | "gemini" | "aparser" | "ollama";
 
 // Upper bound for the search call, not a target. The audit row it feeds is allowed to sit
 // "processing" for 20 minutes (stale_timeout in the geo route) while runAudit is fire-and-
@@ -317,6 +329,62 @@ async function runAparserSearch(
     answerText: r.answer,
     citations,
     model: r.model || undefined,
+  };
+}
+
+/**
+ * Stage 1 for the "ollama" engine: a REAL search through the app's SERP integrations, then a
+ * grounded answer pass on the user's configured AI provider.
+ *
+ * SearXNG is tried first (keyless, self-hosted, free); when the client sent a Serper key and
+ * SearXNG is not configured, Serper takes stage 1, falling back to SearXNG if it fails. The
+ * numbered result pool — plus extracts of the top pages, fetched through the existing scrape
+ * chain — is what the answer prompt may reference; `citationsFromAnswer` enforces that pool, so
+ * a hallucinated source cannot reach the report.
+ */
+async function runOllamaSerpSearch(
+  query: string, language: string, country: string,
+  serp: { provider: "searxng" | "serper"; key: string; baseUrl?: string },
+  analysis: { provider: string; apiKey: string; model?: string; baseUrl?: string },
+): Promise<RawTrace | { error: string }> {
+  const serpOpts = { gl: country, hl: language, num: 15 };
+  let serpRes = await runSerp(serp.provider, serp.key, query, serpOpts);
+  if ((serpRes.error || serpRes.results.length === 0) && serp.provider !== "searxng" && searxngConfigured()) {
+    serpRes = await runSerp("searxng", "", query, serpOpts);
+  }
+  if (serpRes.error) return { error: `geo_search: ${serpRes.error}` };
+  if (!serpRes.results.length) return { error: "geo_search_empty" };
+
+  const pool: OllamaSource[] = serpRes.results.slice(0, 15).map(r => ({
+    url: r.url, title: r.title, domain: r.domain, snippet: r.snippet ?? "",
+  })).filter(s => s.url && s.domain);
+
+  // Open the most promising pages so the answer pass reads content, not just snippets. Bounded:
+  // 5 pages — this must stay cheap and inside the 20-minute audit window.
+  const pages = await scrapeMany(pool.slice(0, 5).map(p => p.url));
+  const texts = new Map<string, string>();
+  pages.forEach((p, i) => {
+    const body = p.contentMarkdown || p.textSample;
+    if (p.ok && body) texts.set(pool[i].url, body.slice(0, 3500));
+  });
+
+  const model = analysis.model || defaultModelFor(analysis.provider);
+  const answer = await fetchLLMDetailed(
+    buildOllamaAnswerPrompt(query, language, country, pool, texts),
+    analysis.provider, analysis.apiKey, 4000, model || undefined, analysis.baseUrl,
+  );
+  if (!answer.text) return { error: `geo_answer: ${answer.error ?? "no text"}` };
+
+  const citations = citationsFromAnswer(answer.text, pool);
+  if (!citations.length) return { error: "geo_no_citations" };
+
+  return {
+    batches: [{ id: "s1", queries: [query], sources: pool.map(p => ({ url: p.url, domain: p.domain })) }],
+    opened: [...texts.keys()].map(url => ({ url })),
+    scannedAll: pool.map(p => ({ url: p.url, domain: p.domain })),
+    answerText: answer.text.trim(),
+    citations,
+    model,
   };
 }
 
@@ -1055,8 +1123,16 @@ export async function runGeoAudit(params: {
    * Full stage-2 credentials, when the caller has them. Optional and additive: a client that
    * sends only `analysisModel` — or nothing — keeps the previous behaviour exactly, which
    * matters because this runs detached in the background for live users.
+   *
+   * On the "ollama" engine this is REQUIRED: it is the only AI credential the engine has — the
+   * grounded answer pass and the analysis pass both run on it.
    */
   analysis?: GeoAnalysisCreds;
+  /**
+   * Stage-1 SERP source for the "ollama" engine ("searxng" | "serper" + the Serper key when
+   * that is the source). Validated by resolveGeoOllamaRun; ignored by every other engine.
+   */
+  serp?: { provider: "searxng" | "serper"; key: string; baseUrl?: string };
   /**
    * Endpoint override for the GEO ENGINE (stage 1 + the stage-2 fallback), from
    * aiBaseUrl_openai. Same convention as the shared client: a gateway key must be spent
@@ -1082,13 +1158,29 @@ export async function runGeoAudit(params: {
   const query = String(params.query ?? "").trim();
   if (!query) return { ok: false, error: "no_query" };
   const apiKey = String(params.apiKey ?? "");
-  if (!apiKey) return { ok: false, error: "no_key" };
   const language = String(params.language ?? "en");
   const country = String(params.country ?? "us");
   const engine: GeoEngine = params.engine === "kie" ? "kie"
     : params.engine === "gemini" ? "gemini"
     : params.engine === "aparser" ? "aparser"
+    : params.engine === "ollama" ? "ollama"
     : "openai";
+  // The vendor engines authenticate stage 1 with their key. The ollama engine's stage 1 is the
+  // app's own SERP integration and stage 2 rides `analysis` creds — so a missing vendor key is
+  // not an error there; the analysis creds are validated instead, below.
+  if (!apiKey && engine !== "ollama") return { ok: false, error: "no_key" };
+  // Stage-2 credentials on the ollama engine are validated together with the search source, so
+  // a misconfigured run fails at the gate with a named error instead of mid-search.
+  let ollamaSerp: { provider: "searxng" | "serper"; key: string; baseUrl?: string } | undefined;
+  if (engine === "ollama") {
+    const gate = resolveGeoOllamaRun({
+      analysis: params.analysis,
+      serp: params.serp,
+      searxngConfigured: searxngConfigured(),
+    });
+    if (!gate.ok) return { ok: false, error: gate.error };
+    ollamaSerp = gate.serp;
+  }
   // A-Parser is not asked for a model — it reports the one its free session happened to serve —
   // so the placeholder here is only what the audit row shows until the real id comes back on
   // the trace. Defaulting it to an OpenAI id would put a model in the report that never ran.
@@ -1096,13 +1188,20 @@ export async function runGeoAudit(params: {
     || (engine === "aparser" ? GEO_APARSER_PARSER
       : engine === "kie" ? "gpt-5-5"
       : engine === "gemini" ? "gemini-2.5-flash"
+      // The ollama engine has no model of its own to request — the answer and analysis passes
+      // both run on the `utility` task's provider and model, which the client sends in
+      // `analysis`. Falling through to an OpenAI id here would put a model in the report that
+      // never ran anywhere.
+      : engine === "ollama" ? (params.analysis?.model || defaultModelFor(params.analysis?.provider || "ollama"))
       : OPENAI_FALLBACK_MODELS[0]);
   const baseUrl = String(params.baseUrl ?? "").trim() || undefined;
   // The endpoint is not optional on this engine: there is no public host to fall back to, and
   // an empty one would send the instance password nowhere useful.
   if (engine === "aparser" && !baseUrl) return { ok: false, error: "aparser_no_url" };
 
-  const trace = await runWebSearch(query, language, country, model, apiKey, engine, baseUrl, params.aparserPreset, params.aparserConfig);
+  const trace = engine === "ollama"
+    ? await runOllamaSerpSearch(query, language, country, ollamaSerp!, params.analysis!)
+    : await runWebSearch(query, language, country, model, apiKey, engine, baseUrl, params.aparserPreset, params.aparserConfig);
   if ("error" in trace) return { ok: false, error: trace.error };
   if (!trace.answerText && trace.citations.length === 0 && trace.batches.length === 0) {
     return { ok: false, error: "empty_trace" };

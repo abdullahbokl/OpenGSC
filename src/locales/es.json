@@ -2078,7 +2078,7 @@
   "geoRunningHint": "La búsqueda web agéntica puede tardar 1–3 minutos. Puedes salir de esta página — el resultado se guarda.",
   "geoNewAudit": "Nueva auditoría",
   "geoRecentTitle": "Auditorías recientes",
-  "geoNoKey": "Sin clave de OpenAI o Kie.ai — añade una en Ajustes → Modelos de IA. La auditoría GEO necesita una clave real con capacidad de búsqueda web.",
+  "geoNoKey": "No hay ningún motor GEO utilizable configurado. El motor Ollama solo necesita su proveedor de IA actual (Ajustes → AI models) y una fuente de búsqueda (SearXNG o una clave de Serper); o añada una clave de OpenAI / Kie.ai / Gemini para los motores de búsqueda agénticos.",
   "geoErrEmpty": "Introduce una palabra clave o consulta de búsqueda.",
   "geoErrTimeout": "Se agotó el tiempo de espera del informe — la búsqueda se interrumpió. El proveedor puede facturar la generación parcial; revisa el gasto en el panel del proveedor.",
   "geoYourPageLabel": "Tu página (opcional)",
@@ -5976,5 +5976,8 @@
   "gapFreeCost": "Gratis — funciona con SearXNG / su proveedor SERP",
   "gapFreeNote": "Modo gratuito: las posiciones y URL de abajo son observaciones de resultados SERP en vivo. Volumen y KD: N/D — no se usa ningún proveedor de métricas y nada se estima. Algunas palabras clave se extrajeron de páginas del competidor y se verificaron en el SERP.",
   "gapFreeUnavailable": "Vía gratuita no disponible: sin SearXNG ni clave de Serper. Añada una clave de proveedor de métricas o configure SearXNG en Ajustes → SEO Tools.",
-  "gapFreeSerpFailed": "Fallo al obtener el SERP: el motor de búsqueda no devolvió resultados."
+  "gapFreeSerpFailed": "Fallo al obtener el SERP: el motor de búsqueda no devolvió resultados.",
+  "geoOllamaNote": "Motor Ollama: la etapa 1 recopila resultados de búsqueda reales mediante su integración de búsqueda (SearXNG o su clave de Serper), y su proveedor de IA actual redacta la respuesta fundamentada y el análisis a partir de esas fuentes. Cada cita se verifica contra los resultados recopilados: Ollama no busca por sí mismo.",
+  "geoNoSearchSource": "No hay fuente de búsqueda disponible: configure SearXNG o añada una clave de Serper (Ajustes → SEO Tools). No se fabricaron resultados.",
+  "geoNoCitations": "La respuesta de la IA no citó ninguno de los resultados de búsqueda recopilados: la auditoría se detuvo en lugar de guardarse con citas inventadas. Reintente o elija otro modelo."
 }

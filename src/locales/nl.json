@@ -2078,7 +2078,7 @@
   "geoRunningHint": "Agentisch webzoeken kan 1–3 minuten duren. Je kunt deze pagina verlaten — het resultaat wordt bewaard.",
   "geoNewAudit": "Nieuwe audit",
   "geoRecentTitle": "Recente audits",
-  "geoNoKey": "Geen OpenAI- of Kie.ai-sleutel — voeg er een toe in Instellingen → AI-modellen. De GEO-audit heeft een echte sleutel met webzoekmogelijkheden nodig.",
+  "geoNoKey": "Geen bruikbare GEO-engine geconfigureerd. De Ollama-engine heeft alleen uw huidige AI-provider (Instellingen → AI models) en een zoekbron nodig (SearXNG of een Serper-sleutel) — of voeg een OpenAI-/Kie.ai-/Gemini-sleutel toe voor de agentische zoek-engines.",
   "geoErrEmpty": "Voer een zoekwoord of zoekopdracht in.",
   "geoErrTimeout": "Time-out bij het wachten op de audit — de zoekopdracht is afgebroken. De provider kan de gedeeltelijke generatie alsnog factureren; controleer je uitgaven in het dashboard van je provider.",
   "geoYourPageLabel": "Je pagina (optioneel)",
@@ -5976,5 +5976,8 @@
   "gapFreeCost": "Gratis — draait op SearXNG / uw SERP-provider",
   "gapFreeNote": "Gratis modus: posities en URL's hieronder zijn waarnemingen uit live SERP-resultaten. Volume en KD: n.v.t. — er wordt geen metrics-provider gebruikt en niets wordt geschat. Sommige keywords zijn gescraped van concurrentpagina's en in het SERP geverifieerd.",
   "gapFreeUnavailable": "Gratis pad niet beschikbaar: geen SearXNG en geen Serper-sleutel. Voeg een metrics-provider-sleutel toe of configureer SearXNG in Instellingen → SEO Tools.",
-  "gapFreeSerpFailed": "SERP-ophaal mislukt — de zoek-backend leverde geen resultaten."
+  "gapFreeSerpFailed": "SERP-ophaal mislukt — de zoek-backend leverde geen resultaten.",
+  "geoOllamaNote": "Ollama-engine: fase 1 verzamelt echte zoekresultaten via uw zoekintegratie (SearXNG of uw Serper-sleutel), en uw huidige AI-provider schrijft het onderbouwde antwoord en de analyse op basis van die bronnen. Elke citatie wordt gecontroleerd aan de hand van de verzamelde resultaten — Ollama zoekt zelf niet.",
+  "geoNoSearchSource": "Geen zoekbron beschikbaar — configureer SearXNG of voeg een Serper-sleutel toe (Instellingen → SEO Tools). Er zijn geen resultaten verzonnen.",
+  "geoNoCitations": "Het AI-antwoord citeerde geen enkele verzamelde zoekresultaat — de audit is gestopt in plaats van opgeslagen met verzonnen citaties. Probeer het opnieuw of kies een ander model."
 }

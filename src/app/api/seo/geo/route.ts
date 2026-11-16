@@ -12,7 +12,7 @@ const audits = () => dbAny.geoAudit;
 
 // Detached background run — not awaited by the request, so the result is persisted even
 // if the client navigates away. The API key lives only in memory for the run.
-function runAudit(id: string, params: { query: string; language: string; country: string; model: string; apiKey: string; engine: GeoEngine; baseUrl?: string; analysisModel?: string; analysis?: GeoAnalysisCreds; aparserPreset?: string; aparserConfig?: string; pageUrl?: string }) {
+function runAudit(id: string, params: { query: string; language: string; country: string; model: string; apiKey: string; engine: GeoEngine; baseUrl?: string; analysisModel?: string; analysis?: GeoAnalysisCreds; aparserPreset?: string; aparserConfig?: string; pageUrl?: string; serp?: { provider: "searxng" | "serper"; key: string; baseUrl?: string } }) {
   runGeoAudit(params)
     .then(async (r) => {
       if (r.ok) await audits().update({ where: { id }, data: { status: "completed", report: JSON.stringify(r.data) } });
@@ -32,11 +32,21 @@ export async function POST(req: Request) {
   const query = String(b.query ?? "").trim().slice(0, 300);
   if (!query) return NextResponse.json({ error: "no_query" }, { status: 400 });
   const apiKey = String(b.apiKey ?? "");
-  if (!apiKey) return NextResponse.json({ error: "no_key" }, { status: 400 });
   const engine: GeoEngine = b.engine === "kie" ? "kie"
     : b.engine === "gemini" ? "gemini"
     : b.engine === "aparser" ? "aparser"
+    : b.engine === "ollama" ? "ollama"
     : "openai";
+  // The vendor engines authenticate stage 1 with this key. The ollama engine's stage 1 is the
+  // app's own SERP integration and stage 2 rides `analysis` creds — validated below and again
+  // (with the search-source check) inside runGeoAudit, so a misconfigured run fails with a
+  // named error rather than a background burn.
+  if (!apiKey && engine !== "ollama") return NextResponse.json({ error: "no_key" }, { status: 400 });
+  if (engine === "ollama" && !(b.analysis && typeof b.analysis === "object"
+    && typeof b.analysis.provider === "string" && b.analysis.provider.trim()
+    && (typeof b.analysis.apiKey === "string" && b.analysis.apiKey.trim()))) {
+    return NextResponse.json({ error: "geo_no_analysis_creds" }, { status: 400 });
+  }
   const country = String(b.country ?? "us");
   const language = String(b.language || defaultLanguageFor(country));
   // On the A-Parser engine the model is reported by the run, not requested — this is only the
@@ -46,6 +56,9 @@ export async function POST(req: Request) {
     || (engine === "aparser" ? GEO_APARSER_PARSER
       : engine === "kie" ? "gpt-5-5"
       : engine === "gemini" ? "gemini-2.5-flash"
+      // The ollama engine runs on the `utility` task's model (sent in `analysis`); naming an
+      // OpenAI id here would write a model that never ran into the audit row.
+      : engine === "ollama" && typeof b.analysis?.model === "string" && b.analysis.model.trim() ? b.analysis.model.trim()
       : OPENAI_FALLBACK_MODELS[0]);
   // Engine endpoint override (aiBaseUrl_openai): validated like analysis.baseUrl, because this
   // string decides where the API key is sent.
@@ -94,7 +107,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `db: ${String((e as Error)?.message ?? e)} (run: npx prisma db push)` }, { status: 500 });
   }
 
-  runAudit(rec.id, { query, language, country, model, apiKey, engine, baseUrl, analysisModel, analysis, aparserPreset, aparserConfig, pageUrl }); // fire-and-forget
+  // Stage-1 SERP credentials for the ollama engine, validated field by field like `analysis`:
+  // this body reaches an outbound fetch, so nothing is spread blindly from the client.
+  const serp = engine === "ollama" && typeof b.serp === "object" && b.serp
+    ? {
+        provider: b.serp.provider === "serper" ? "serper" as const : "searxng" as const,
+        key: typeof b.serp.key === "string" ? b.serp.key.trim().slice(0, 400) : "",
+        ...(typeof b.serp.baseUrl === "string" && b.serp.baseUrl.trim() ? { baseUrl: b.serp.baseUrl.trim() } : {}),
+      }
+    : undefined;
+
+  runAudit(rec.id, { query, language, country, model, apiKey, engine, baseUrl, analysisModel, analysis, aparserPreset, aparserConfig, pageUrl, serp }); // fire-and-forget
   return NextResponse.json({ id: rec.id });
 }
 

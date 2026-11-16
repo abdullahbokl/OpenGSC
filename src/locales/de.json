@@ -2078,7 +2078,7 @@
   "geoRunningHint": "Agentic Websuche kann 1—3 Minuten dauern. Du kannst diese Seite verlassen – das Ergebnis wird gespeichert.",
   "geoNewAudit": "Neues Audit",
   "geoRecentTitle": "Aktuelle Audits",
-  "geoNoKey": "Kein OpenAI- oder Kie.ai-Key — füge einen unter Einstellungen → KI-Modelle hinzu. Das GEO-Audit benötigt einen echten websuchfähigen Key.",
+  "geoNoKey": "Kein verwendbares GEO-Engine konfiguriert. Die Ollama-Engine benötigt nur Ihren aktuellen KI-Anbieter (Einstellungen → AI models) und eine Suchquelle (SearXNG oder einen Serper-Schlüssel) – oder fügen Sie einen OpenAI-/Kie.ai-/Gemini-Schlüssel für die agentischen Such-Engines hinzu.",
   "geoErrEmpty": "Gib ein Keyword oder eine Suchanfrage ein.",
   "geoErrTimeout": "Zeitüberschreitung beim Warten auf das Audit — die Suche wurde abgebrochen. Der Anbieter kann die teilweise Generierung dennoch berechnen; prüfe den Verbrauch im Dashboard des Anbieters.",
   "geoYourPageLabel": "Deine Seite (optional)",
@@ -5976,5 +5976,8 @@
   "gapFreeCost": "Kostenlos – läuft über SearXNG / Ihren SERP-Anbieter",
   "gapFreeNote": "Kostenloser Modus: Positionen und URLs unten sind Beobachtungen aus Live-SERPs. Volumen und KD: N/V – kein Metrics-Anbieter wird genutzt, nichts wird geschätzt. Einige Keywords wurden von Wettbewerberseiten gescrappt und im SERP verifiziert.",
   "gapFreeUnavailable": "Kostenloser Pfad nicht verfügbar: weder SearXNG noch Serper-Schlüssel. Fügen Sie einen Metrics-Provider-Schlüssel hinzu oder konfigurieren Sie SearXNG unter Einstellungen → SEO Tools.",
-  "gapFreeSerpFailed": "SERP-Abruf fehlgeschlagen – die Such-Backend lieferte keine Ergebnisse."
+  "gapFreeSerpFailed": "SERP-Abruf fehlgeschlagen – die Such-Backend lieferte keine Ergebnisse.",
+  "geoOllamaNote": "Ollama-Engine: Stufe 1 sammelt echte Suchergebnisse über Ihre Suchintegration (SearXNG oder Ihren Serper-Schlüssel), und Ihr aktueller KI-Anbieter verfasst die belegte Antwort und die Analyse auf Basis dieser Quellen. Jede Quellenangabe wird gegen die gesammelten Ergebnisse geprüft – Ollama selbst sucht nicht.",
+  "geoNoSearchSource": "Keine Suchquelle verfügbar – SearXNG konfigurieren oder einen Serper-Schlüssel hinzufügen (Einstellungen → SEO Tools). Es wurden keine Ergebnisse erfunden.",
+  "geoNoCitations": "Die KI-Antwort zitierte keines der gesammelten Suchergebnisse – der Audit wurde gestoppt statt mit erfundenen Quellenangaben gespeichert zu werden. Versuchen Sie es erneut oder wählen Sie ein anderes Modell."
 }

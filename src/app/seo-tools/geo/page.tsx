@@ -12,18 +12,19 @@ import {
   startGeoAudit, getGeoAudit, listGeoAudits, deleteGeoAudit, parseReport,
   getOpenAiKey, getOpenAiBaseUrl, getKieKeyForGeo, getGeminiKeyForGeo, getGeminiBaseUrl,
   getGeoEngine, setGeoEngine, getGeoApiKey, GeoEngineChoice, getAparserCreds,
-  getGeoModel, setGeoModel, GeoAuditRec,
+  getGeoModel, setGeoModel, GeoAuditRec, getOllamaEngineCreds, hasOllamaEngine,
 } from "@/lib/seo/geoClient";
 import { rankModels, resolveModel, OPENAI_FALLBACK_MODELS, type ModelOpt } from "@/lib/seo/models";
-import { getTaskCreds } from "@/lib/seo/keys";
+import { getTaskCreds, serpPayload } from "@/lib/seo/keys";
 
 // Fallback lists only — used until the live /api/seo/models call resolves (or if it fails).
 // The provider's actual current lineup is fetched live below, same as the global model picker.
 const OPENAI_MODELS_FALLBACK = OPENAI_FALLBACK_MODELS;
 const KIE_MODELS_FALLBACK = ["gpt-5-5", "gpt-5-4", "gpt-5-2"];
 const GEMINI_MODELS_FALLBACK = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"];
-// A-Parser is absent on purpose: its model is reported by the run, never picked, so there is
-// no list to fall back to and the picker is hidden for it entirely.
+// A-Parser and Ollama are absent on purpose: A-Parser's model is reported by the run, and the
+// Ollama engine runs on the `utility` task's provider+model — neither is picked here, so there
+// is no list to fall back to and the picker is hidden for them entirely.
 const modelsFallbackFor = (eng: GeoEngineChoice): string[] =>
   eng === "kie" ? KIE_MODELS_FALLBACK : eng === "gemini" ? GEMINI_MODELS_FALLBACK : OPENAI_MODELS_FALLBACK;
 
@@ -54,19 +55,21 @@ export default function GeoAuditPage() {
   const [hasKie, setHasKie] = useState(false);
   const [hasGemini, setHasGemini] = useState(false);
   const [hasAparser, setHasAparser] = useState(false);
+  const [hasOllama, setHasOllama] = useState(false);
 
   useEffect(() => {
     const oa = !!getOpenAiKey(), kie = !!getKieKeyForGeo(), gem = !!getGeminiKeyForGeo();
     const ap = getAparserCreds();
     const apOk = !!ap.url.trim() && !!ap.password.trim();
-    setHasOpenAi(oa); setHasKie(kie); setHasGemini(gem); setHasAparser(apOk);
-    setHasKey(oa || kie || gem || apOk);
+    const ol = hasOllamaEngine();
+    setHasOpenAi(oa); setHasKie(kie); setHasGemini(gem); setHasAparser(apOk); setHasOllama(ol);
+    setHasKey(oa || kie || gem || apOk || ol);
     const eng = getGeoEngine();
     setEngine(eng);
     // A stored choice is kept as-is even when it is absent from the fallback list — the fallback
     // is a stopgap for "no key to list models with", not a whitelist of allowed models.
     // loadModels() replaces it if the account no longer offers it.
-    setModel(eng === "aparser" ? "" : getGeoModel() || modelsFallbackFor(eng)[0]);
+    setModel(eng === "aparser" || eng === "ollama" ? "" : getGeoModel() || modelsFallbackFor(eng)[0]);
     loadModels(eng);
     refreshRecent();
   }, []);
@@ -75,8 +78,9 @@ export default function GeoAuditPage() {
   // AI-provider settings picker) instead of trusting a hardcoded, easily stale id list.
   async function loadModels(eng: GeoEngineChoice) {
     // /api/seo/models knows AI providers only. A-Parser is not one — asking it would return an
-    // empty list and leave an empty dropdown on screen for a choice that does not exist.
-    if (eng === "aparser") { setModelOpts([]); return; }
+    // empty list and leave an empty dropdown on screen for a choice that does not exist. The
+    // ollama engine likewise: its model comes from the `utility` task setting, not a picker.
+    if (eng === "aparser" || eng === "ollama") { setModelOpts([]); return; }
     const apiKey = getGeoApiKey(eng);
     const fallback = modelsFallbackFor(eng);
     if (!apiKey) { setModelOpts(fallback.map(id => ({ id, label: id }))); return; }
@@ -111,7 +115,7 @@ export default function GeoAuditPage() {
   function chooseEngine(e: GeoEngineChoice) {
     setEngine(e);
     setGeoEngine(e);
-    if (e === "aparser") { setModel(""); setModelOpts([]); return; }
+    if (e === "aparser" || e === "ollama") { setModel(""); setModelOpts([]); return; }
     const fallback = modelsFallbackFor(e);
     setModel(fallback[0]);
     setModelOpts(fallback.map(id => ({ id, label: id })));
@@ -124,11 +128,17 @@ export default function GeoAuditPage() {
     setErr("");
     const q = query.trim();
     if (!q) { setErr(t("geoErrEmpty")); return; }
-    const apiKey = getGeoApiKey(engine);
-    if (!apiKey) { setErr(t("geoNoKey")); return; }
-    // Not on A-Parser: there is no model to remember, and storing "" here would wipe the choice
-    // the user made for the engines that do have one.
-    if (engine !== "aparser") setGeoModel(model);
+    // The ollama engine has no vendor key to check — its run is gated on the `utility` task
+    // creds instead (stage 1 is the app's SERP integration, stage 2 those creds).
+    if (engine === "ollama") {
+      if (!hasOllamaEngine()) { setErr(t("geoNoKey")); return; }
+    } else {
+      const apiKey = getGeoApiKey(engine);
+      if (!apiKey) { setErr(t("geoNoKey")); return; }
+    }
+    // Not on A-Parser/Ollama: there is no model to remember there, and storing "" here would
+    // wipe the choice the user made for the engines that do have one.
+    if (engine !== "aparser" && engine !== "ollama") setGeoModel(model);
     setRunning(true);
     setReport(null);
     setStage(t("geoStageSearching"));
@@ -154,7 +164,8 @@ export default function GeoAuditPage() {
     // falls back to its own cheap default instead of an id from the wrong vendor.
     // "aparser" is deliberately not a provider id here: no AI provider can equal it, so
     // `legacyModel` stays undefined and no model id from another vendor can travel to it.
-    const engineProvider = engine === "kie" ? "kie" : engine === "gemini" ? "gemini" : engine === "aparser" ? "aparser" : "openai";
+    const engineProvider = engine === "kie" ? "kie" : engine === "gemini" ? "gemini"
+      : engine === "aparser" ? "aparser" : engine === "ollama" ? "ollama" : "openai";
     const legacyModel = util.provider === engineProvider ? (util.model || undefined) : undefined;
     const aparser = getAparserCreds();
     // On A-Parser the endpoint rides the same `baseUrl` field every other engine override uses,
@@ -163,12 +174,24 @@ export default function GeoAuditPage() {
       : engine === "gemini" ? getGeminiBaseUrl() || undefined
       : engine === "aparser" ? aparser.url.trim() || undefined
       : undefined;
+    // Stage-1 SERP source for the ollama engine: SearXNG is server-side (keyless), Serper rides
+    // the browser's active SERP credentials when that is what is configured.
+    const sp = serpPayload();
+    const serp = engine === "ollama"
+      ? { provider: sp.serpProvider === "serper" ? "serper" as const : "searxng" as const,
+          key: sp.serpProvider === "serper" ? sp.serpKey : "",
+          ...(sp.serpBaseUrl ? { baseUrl: sp.serpBaseUrl } : {}) }
+      : undefined;
     const { id, error } = await startGeoAudit({
-      query: q, language, country, model: engine === "aparser" ? "" : model, apiKey, engine,
+      // The ollama engine carries no vendor key — stage 1 is the app's SERP integration and
+      // stage 2 rides `analysis`; the route exempts it from the key check accordingly.
+      query: q, language, country, model: engine === "aparser" || engine === "ollama" ? "" : model,
+      apiKey: engine === "ollama" ? "" : getGeoApiKey(engine), engine,
       baseUrl: engineBaseUrl,
       analysisModel: legacyModel,
       analysis,
       aparserConfig: engine === "aparser" ? aparser.config.trim() || undefined : undefined,
+      serp,
       pageUrl: pageUrl.trim() || undefined,
     });
     if (error || !id) { setRunning(false); setErr(error || "audit_failed"); return; }
@@ -265,10 +288,10 @@ export default function GeoAuditPage() {
         <input className="tool-input" value={pageUrl} onChange={e => setPageUrl(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !running) run(); }}
           placeholder={t("geoYourPagePh")} disabled={running} />
 
-        {([hasOpenAi, hasKie, hasGemini, hasAparser].filter(Boolean).length > 1) && (
+        {([hasOpenAi, hasKie, hasGemini, hasAparser, hasOllama].filter(Boolean).length > 1) && (
           <div style={{ display: "flex", gap: "8px", marginTop: "14px", flexWrap: "wrap" }}>
-            {(["openai", "gemini", "kie", "aparser"] as GeoEngineChoice[])
-              .filter(e => (e === "openai" && hasOpenAi) || (e === "gemini" && hasGemini) || (e === "kie" && hasKie) || (e === "aparser" && hasAparser))
+            {(["ollama", "openai", "gemini", "kie", "aparser"] as GeoEngineChoice[])
+              .filter(e => (e === "openai" && hasOpenAi) || (e === "gemini" && hasGemini) || (e === "kie" && hasKie) || (e === "aparser" && hasAparser) || (e === "ollama" && hasOllama))
               .map(e => (
               <button key={e} onClick={() => !running && chooseEngine(e)} disabled={running}
                 style={{
@@ -277,7 +300,7 @@ export default function GeoAuditPage() {
                   background: engine === e ? "rgba(191,90,242,0.12)" : "var(--color-card)",
                   color: engine === e ? "var(--color-accent-purple)" : "var(--color-text-secondary)",
                 }}>
-                {e === "openai" ? "OpenAI" : e === "gemini" ? "Gemini" : e === "kie" ? "Kie.ai" : "A-Parser"}
+                {e === "openai" ? "OpenAI" : e === "gemini" ? "Gemini" : e === "kie" ? "Kie.ai" : e === "ollama" ? "Ollama" : "A-Parser"}
               </button>
             ))}
           </div>
@@ -289,6 +312,15 @@ export default function GeoAuditPage() {
         {engine === "aparser" && (
           <p style={{ marginTop: "10px", marginBottom: 0, fontSize: "12px", color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
             {t("geoAparserNote")}
+          </p>
+        )}
+
+        {/* Same honesty for the ollama engine, the other no-vendor-key path: stage 1 is the
+            app's own search integration and stage 2 is the provider already configured — so
+            where each half of the report comes from is stated, not implied. */}
+        {engine === "ollama" && (
+          <p style={{ marginTop: "10px", marginBottom: 0, fontSize: "12px", color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
+            {t("geoOllamaNote")}
           </p>
         )}
 
@@ -306,12 +338,17 @@ export default function GeoAuditPage() {
             </select>
           </div>
           <div>
-            <label className="tool-field-label">{t("geoModel")}{modelsLoading && engine !== "aparser" ? " …" : ""}</label>
+            <label className="tool-field-label">{t("geoModel")}{modelsLoading && engine !== "aparser" && engine !== "ollama" ? " …" : ""}</label>
             {engine === "aparser" ? (
               // A disabled field rather than a hidden one: the report will name a model, and the
               // user should learn here — before paying for the analysis pass — that the free
               // session picks it, not them.
               <input className="tool-input" value={t("geoAparserModelAuto")} readOnly disabled />
+            ) : engine === "ollama" ? (
+              // Same pattern: the ollama engine runs on the `utility` task's provider and model —
+              // the same setting every other mechanical analysis pass uses — so it is shown, not
+              // picked here.
+              <input className="tool-input" value={`${getOllamaEngineCreds().model || getOllamaEngineCreds().provider}`} readOnly disabled />
             ) : (
               <select className="tool-input" value={model} onChange={e => setModel(e.target.value)} disabled={running || modelsLoading}>
                 {modelOpts.map(mm => <option key={mm.id} value={mm.id}>{mm.label}</option>)}
@@ -322,8 +359,16 @@ export default function GeoAuditPage() {
 
         {/* Server error codes that mean "we gave up waiting" (timeout_after_15m, stale_timeout)
             get the same human sentence as the client-side poll cap — the raw code alone reads as
-            a broken key when the real story is a long agentic search. */}
-        {err && <div style={{ marginTop: "14px", fontSize: "13px", color: "var(--color-accent-red)", display: "flex", gap: "8px", alignItems: "center" }}><AlertTriangle size={15} /> {/timeout/i.test(err) ? t("geoErrTimeout") : err}</div>}
+            a broken key when the real story is a long agentic search. The ollama engine's named
+            failures get the same treatment. */}
+        {err && <div style={{ marginTop: "14px", fontSize: "13px", color: "var(--color-accent-red)", display: "flex", gap: "8px", alignItems: "center" }}>
+          <AlertTriangle size={15} />
+          {/timeout/i.test(err) ? t("geoErrTimeout")
+            : /geo_no_search_source|geo_search/.test(err) ? t("geoNoSearchSource")
+            : /geo_no_citations/.test(err) ? t("geoNoCitations")
+            : /geo_no_analysis_creds/.test(err) ? t("geoNoKey")
+            : err}
+        </div>}
 
         <button onClick={run} disabled={running || !query.trim()}
           style={{ marginTop: "18px", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "12px", borderRadius: "10px", border: "none", background: "var(--color-text-primary)", color: "var(--color-bg)", fontSize: "14px", fontWeight: 700, cursor: running || !query.trim() ? "default" : "pointer", opacity: running || !query.trim() ? 0.6 : 1 }}>
