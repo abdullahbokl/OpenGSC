@@ -72,6 +72,12 @@ export async function POST(req: Request) {
     const r = await fetchBrandMentions(brand, limit);
     if (r.error) { errors[brand] = r.error; continue; }
     try {
+      // Keep each URL's original first-seen date across runs: the DELETE+INSERT cycle defines
+      // "fresh" for the row set, but rewriting firstSeen to "now" would turn the stored date
+      // into a last-run stamp — the UI's "seen {date}" must stay a genuine first sighting.
+      const prevRows = await rawQuery<{ urlFrom: string; firstSeen: string }[]>(
+        `SELECT urlFrom, firstSeen FROM "LinkMention" WHERE userId = ? AND brand = ?`, userId, brand);
+      const prevSeen = new Map((prevRows || []).map(r => [r.urlFrom, String(r.firstSeen)]));
       await rawExec(`DELETE FROM "LinkMention" WHERE userId = ? AND brand = ?`, userId, brand);
       for (const row of r.rows || []) {
         await rawExec(
@@ -79,8 +85,9 @@ export async function POST(req: Request) {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           rid(), userId, brand, row.url, row.domain,
           String(row.title ?? ""), "", 0,
-          // firstSeen = when *we* saw the mention, not a link-index first-seen date.
-          new Date().toISOString().slice(0, 10), "",
+          // firstSeen = when *we* first saw the mention (preserved from the previous run when
+          // the URL was already known), not a link-index first-seen date.
+          prevSeen.get(row.url) || new Date().toISOString().slice(0, 10), "",
           // No link was verified — dofollow stays at its default but the empty anchor tells the
           // UI this row is a mention, not a confirmed backlink.
           1, new Date().toISOString());

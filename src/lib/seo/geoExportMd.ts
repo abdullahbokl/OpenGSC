@@ -15,6 +15,9 @@ export function buildGeoMarkdown(r: GeoReport): string {
   L.push(`- Language: ${r.language} · Country: ${r.country.toUpperCase()}`);
   L.push(`- Intent: ${r.classification.intent} (${r.classification.intentConfidence.toFixed(2)}) · Stage: ${r.classification.stage} · Topic: ${r.classification.topic}`);
   if (r.pageUrl) L.push(`- Your page: ${r.pageUrl}`);
+  // The exported doc must carry the same honesty as the screen: when stage 2 failed, the
+  // qualitative sections below are template text, not findings.
+  if (r.analysisFailed) L.push(`- **Analysis failed**: the qualitative sections below are placeholder text; only the metrics are measured data.`);
   L.push("");
 
   L.push("## Metrics");

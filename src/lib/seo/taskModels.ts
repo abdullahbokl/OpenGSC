@@ -21,12 +21,16 @@
 // explicit `seoModel`, a per-task `seoTaskModel_<task>`, or the task's env var always wins, and the
 // global AI provider/model default is never touched.
 
-export type StructuredTask = "outline" | "citations";
+export type StructuredTask = "outline" | "citations" | "insights";
 
 const TASK_MODELS: Record<string, Partial<Record<StructuredTask, string>>> = {
   ollama: {
     outline: "gpt-oss:120b",
     citations: "mimo-v2.6-flash",
+    // Insights summarization over Link Monitor rows: same failure mode as citations on the
+    // reasoning flagship (whole budget spent thinking, empty text). The measured non-reasoning
+    // flash model handles the long-row summary reliably.
+    insights: "mimo-v2.6-flash",
   },
 };
 
@@ -34,6 +38,7 @@ const TASK_MODELS: Record<string, Partial<Record<StructuredTask, string>>> = {
 export const TASK_MODEL_ENV: Record<StructuredTask, string> = {
   outline: "OUTLINE_AI_MODEL",
   citations: "CITATIONS_AI_MODEL",
+  insights: "INSIGHTS_AI_MODEL",
 };
 
 /**

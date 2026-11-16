@@ -2,6 +2,7 @@ import { DEFAULT_AI_PROVIDER } from "@/lib/providerDefaults";
 import { NextResponse } from "next/server";
 import { workspaceUserId } from "@/lib/team/workspace";
 import { fetchLLM } from "@/lib/llm";
+import { taskModelFor } from "@/lib/seo/taskModels";
 import { rawQuery } from "@/lib/db/raw";
 
 // POST /api/linkwatch/insights { aiProvider, aiApiKey, model?, aiBaseUrl?, language? }
@@ -51,8 +52,15 @@ export async function POST(req: Request) {
 ДАННЫЕ (${mentions.length} упоминаний):
 ${rows.slice(0, 60000)}`;
 
-  const text = await fetchLLM(prompt, String(b.aiProvider ?? DEFAULT_AI_PROVIDER), apiKey, 4000,
-    b.model ? String(b.model) : undefined, b.aiBaseUrl ? String(b.aiBaseUrl) : undefined);
+  // Model resolution: an explicit model from the client wins; otherwise a measured non-reasoning
+  // task default (mimo-v2.6-flash on Ollama Cloud) — the reasoning flagship burns its whole
+  // output budget thinking and returns nothing at a 4000-token ask. taskModelFor returns ""
+  // for providers with no measured default, which keeps the old behaviour exactly.
+  const provider = String(b.aiProvider ?? DEFAULT_AI_PROVIDER);
+  const model = b.model ? String(b.model)
+    : taskModelFor(provider, "insights") || undefined;
+  const text = await fetchLLM(prompt, provider, apiKey, 4000,
+    model, b.aiBaseUrl ? String(b.aiBaseUrl) : undefined);
   if (!text) return NextResponse.json({ error: "generation_failed" }, { status: 502 });
   return NextResponse.json({ insights: text });
 }

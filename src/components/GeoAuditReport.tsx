@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Eye, ExternalLink, Search, Target, Flag, Lightbulb, FileText, Check, X, ArrowUp } from "lucide-react";
+import { ChevronDown, Eye, ExternalLink, Search, Target, Flag, Lightbulb, FileText, Check, X, ArrowUp, AlertTriangle } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import type { GeoReport } from "@/lib/seo/geo";
 
@@ -65,8 +65,18 @@ export default function GeoAuditReport({ report }: { report: GeoReport }) {
           <span style={chip}>{tp("geoIntent")}: {report.classification.intent} · {report.classification.intentConfidence.toFixed(2)}</span>
           <span style={chip}>{tp("geoStage")}: {report.classification.stage}</span>
           <span style={chip}>{tp("geoTopic")}: {report.classification.topic}</span>
-          <span style={{ ...chip, color: GREEN, borderColor: GREEN }}><Check size={13} style={{ marginRight: 5 }} /> {tp("geoFullAudit")}</span>
+          {report.analysisFailed
+            ? <span style={{ ...chip, color: "var(--color-accent-orange)", borderColor: "var(--color-accent-orange)" }}>
+                <AlertTriangle size={13} style={{ marginRight: 5 }} /> {tp("geoAnalysisFailedChip")}
+              </span>
+            : <span style={{ ...chip, color: GREEN, borderColor: GREEN }}><Check size={13} style={{ marginRight: 5 }} /> {tp("geoFullAudit")}</span>}
         </div>
+        {report.analysisFailed && (
+          <div style={{ ...card, marginTop: "14px", padding: "13px 16px", borderColor: "rgba(255,159,10,0.35)", background: "rgba(255,159,10,0.06)", fontSize: "13px", color: "var(--color-text-secondary)", display: "flex", gap: "10px", alignItems: "center" }}>
+            <AlertTriangle size={16} color="var(--color-accent-orange)" />
+            <span>{tp("geoAnalysisFailedNote")}</span>
+          </div>
+        )}
       </div>
 
       {/* Your page — the actionable verdict, present only when the audit ran with a page URL.

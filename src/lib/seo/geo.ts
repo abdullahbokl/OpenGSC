@@ -30,6 +30,8 @@ export interface GeoReport {
   country: string;
   model: string;
   createdAt: number;
+  /** Stage-2 analysis failed: the qualitative half is template text, not findings. */
+  analysisFailed?: boolean;
   classification: { intent: string; intentConfidence: number; stage: string; topic: string };
   metrics: {
     searchBatches: number;
@@ -802,6 +804,12 @@ export function assembleReport(opts: {
 }): GeoReport {
   const { query, language, country, model, trace, analysis, pageUrl, ownPage } = opts;
   const a = analysis ?? {};
+  // A failed stage-2 pass is not a failed audit — the metrics/batches/citations above are real —
+  // but every qualitative field below is template text. The flag travels in the report so the
+  // UI can say "analysis failed — metrics only" instead of letting template prose read as
+  // findings. JSON.stringify drops the key when false keeps the old shape for older clients
+  // only in the sense of "not present"; the UI treats a missing flag as false.
+  const analysisFailed = analysis == null;
 
   // Citation counts per domain.
   const citeCountByDomain = new Map<string, number>();
@@ -998,6 +1006,7 @@ export function assembleReport(opts: {
 
   return {
     query, language, country, model, createdAt: Date.now(),
+    ...(analysisFailed ? { analysisFailed: true } : {}),
     classification: {
       intent: String(a.intent || "Commercial"),
       intentConfidence: Number(a.intentConfidence) || 0.8,

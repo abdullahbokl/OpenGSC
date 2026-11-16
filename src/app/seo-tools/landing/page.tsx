@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Search, Loader2, Check, AlertTriangle, Wand2, Plus, ScanEye, Upload, Eye,
+  Search, Loader2, Check, AlertTriangle, Wand2, Plus, ScanEye, Eye,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import SeoJobProgress from "@/components/SeoJobProgress";
@@ -104,7 +104,8 @@ export default function LandingPage() {
   const ai = mounted ? getSeoGenCreds() : { provider: "", apiKey: "", model: "" };
   const serpCreds = mounted ? getSerpCreds() : { provider: "", apiKey: "" };
   const serpReady = useSerpReadiness(serpCreds);
-  const activePolicy = mounted ? (loadPolicies().find(p => p.name === getActivePolicyName()) || loadPolicies()[0]) : null;
+  // Fall back to NO policy, never an unrelated alphabetical-first one (see the outline page note).
+  const activePolicy = mounted ? (loadPolicies().find(p => p.name === getActivePolicyName()) || null) : null;
 
   const resolveTone = () => tone === "custom" ? customTone
     : tone ? toneToPrompt(tone)
@@ -116,15 +117,20 @@ export default function LandingPage() {
   async function ensureScraped(urls: string[]): Promise<Record<string, Scraped>> {
     const missing = urls.filter(u => !scraped[u]);
     if (!missing.length) return scraped;
-    const res = await fetch("/api/seo/scrape", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ urls: missing, firecrawlKey: getFirecrawlKey() }),
-    });
-    const data = await res.json();
-    const next = { ...scraped };
-    (data.pages || []).forEach((p: Scraped) => { next[p.url] = p; });
-    setScraped(next);
-    return next;
+    // The scrape API caps at 15 urls per request — chunk like the Outline page does, so
+    // Top N 20/30 gets every selected competitor scraped instead of silently dropping the tail.
+    for (let i = 0; i < missing.length; i += 15) {
+      const chunk = missing.slice(i, i + 15);
+      const res = await fetch("/api/seo/scrape", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: chunk, firecrawlKey: getFirecrawlKey() }),
+      });
+      const data = await res.json();
+      const next = { ...scraped };
+      (data.pages || []).forEach((p: Scraped) => { next[p.url] = p; });
+      setScraped(next);
+    }
+    return { ...scraped };
   }
 
   // Same routing as the outline tool — see the note there. Kept as a near-copy rather than a
@@ -532,9 +538,6 @@ export default function LandingPage() {
                 </button>
                 <button onClick={triggerScreenshotUpload} disabled={myStructureLoading !== ""} style={btnGhost}>
                   {myStructureLoading === "vision" ? <Loader2 size={13} className="spin" /> : <ScanEye size={13} />} {t("seoLpParseScreenshot")}
-                </button>
-                <button onClick={triggerScreenshotUpload} disabled={myStructureLoading !== ""} style={btnGhost}>
-                  <Upload size={13} /> {t("seoLpUploadScreenshot")}
                 </button>
               </div>
               {myStructureMeta && <div style={{ fontSize: "11px", color: "var(--color-text-tertiary)", marginTop: "8px" }}>{myStructureMeta}</div>}

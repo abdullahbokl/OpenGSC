@@ -61,6 +61,7 @@ export default function LinkWatchPage() {
   const [outreachRefresh, setOutreachRefresh] = useState(0);
   const [prospectDomains, setProspectDomains] = useState<Set<string>>(new Set());
   const [outreachInfo, setOutreachInfo] = useState("");
+  const [loadErr, setLoadErr] = useState("");
 
   useEffect(() => {
     if (!mounted) return;
@@ -74,7 +75,11 @@ export default function LinkWatchPage() {
     try {
       const d = await fetch("/api/linkwatch").then(r => r.json());
       setBrands(d.brands || []); setMentions(d.mentions || []); setTopDomains(d.topDomains || []);
-    } catch {}
+      setLoadErr("");
+    } catch {
+      // A dead API must not render as an empty state — say so out loud.
+      setLoadErr(t("lwLoadFailed") as string);
+    }
   }
 
   async function reloadOutreachDomains() {
@@ -180,6 +185,7 @@ export default function LinkWatchPage() {
       </div>
 
       {err && <div className={card} style={{ borderColor: "rgba(255,69,58,0.35)", background: "rgba(255,69,58,0.06)", color: "var(--color-accent-red)", fontSize: "12px" }}>{err}</div>}
+      {loadErr && <div className={card} style={{ borderColor: "rgba(255,69,58,0.35)", background: "rgba(255,69,58,0.06)", color: "var(--color-accent-red)", fontSize: "12px" }}>{loadErr}</div>}
 
       {section === "mentions" && <>
 
@@ -233,7 +239,7 @@ export default function LinkWatchPage() {
                   <a href={`https://${d.domainFrom}`} target="_blank" rel="noreferrer" style={{ color: "var(--color-text-primary)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis" }}>{d.domainFrom} <ExternalLink size={9} style={{ opacity: 0.5 }} /></a>
                   <span style={{ fontWeight: 700, color: Number(d.brandsLinked) > 1 ? "var(--color-accent-green)" : "var(--color-text-secondary)" }}>{Number(d.brandsLinked)}</span>
                   <span>{Number(d.links)}</span>
-                  <span>DR {Math.round(Number(d.maxDr))}</span>
+                  {Number(d.maxDr) > 0 ? <span>DR {Math.round(Number(d.maxDr))}</span> : <span style={{ color: "var(--color-text-tertiary)" }}>—</span>}
                   <button onClick={() => addProspect({ domain: d.domainFrom })} disabled={prospectDomains.has(d.domainFrom)} style={{ ...btnGhost, padding: "5px 8px", fontSize: "10px", opacity: prospectDomains.has(d.domainFrom) ? 0.55 : 1 }}>
                     {prospectDomains.has(d.domainFrom) ? <Check size={11} /> : <Plus size={11} />} {t(prospectDomains.has(d.domainFrom) ? "outreachSaved" : "outreachSaveProspect")}
                   </button>
