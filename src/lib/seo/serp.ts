@@ -133,6 +133,13 @@ export interface SerpResponse {
   engines?: string[];
   /** Engines that failed or were suspended while answering (SearXNG only). */
   unresponsiveEngines?: { engine: string; error: string }[];
+  /**
+   * SearXNG only: the requested `language` filter was dropped on a retry because a language-
+   * scoped pass returned zero rows (measured: bing answers an empty success for any Arabic
+   * language code). The rows are real results, just not language-scoped — consumers that
+   * depend on language scoping should check this flag rather than trust the request they sent.
+   */
+  languageDropped?: boolean;
   /** A-Parser only: positions left empty because the provider mis-resolved their link, with the title Google showed there. */
   repairedRows?: { position: number; title: string }[];
   /**

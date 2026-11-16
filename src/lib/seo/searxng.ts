@@ -406,10 +406,19 @@ export async function searxngSearch(
   const seen = new Set<string>();
   const unresponsive: { engine: string; error: string }[] = [];
   const failures: PageOutcome[] = [];
+  // Set when the language filter had to be dropped to get any rows at all — consumers that rely
+  // on language scoping can check this instead of trusting the request they sent.
+  let languageDropped = false;
 
-  const runPass = async (passEngines: string[], pages: number): Promise<void> => {
+  const runPass = async (passEngines: string[], pages: number, language?: string | null): Promise<void> => {
     for (let page = 1; page <= pages; page += 1) {
       const params = buildSearxngParams(keyword, opts, passEngines, page);
+      // The language-retry below reruns the same pass without the language filter: `null`
+      // strips the param, a string overrides it, undefined keeps what buildSearxngParams chose.
+      if (language !== undefined) {
+        if (language === null) delete params.language;
+        else params.language = language;
+      }
       const outcome = await fetchPageWithRetry(params, deps, timeoutMs);
       if (!outcome.ok) {
         if (failures.length === 0) failures.push(outcome);
@@ -431,6 +440,18 @@ export async function searxngSearch(
   };
 
   await runPass(engines, wantedPages);
+
+  // A language-scoped pass can come back as a clean, successful zero. Measured on this install:
+  // bing — the only engine that is not upstream-rate-limited — returns 0 results for ANY Arabic
+  // language code ("ar", "ar-EG", "ar-XA") while the identical query without the language param
+  // returns 10, and SearXNG reports the empty answer as a success, so nothing downstream can
+  // tell "no results exist" from "the language filter emptied it". Retry the same engines once
+  // without the language restriction: the rows are still real results, just not language-scoped,
+  // which beats turning a working engine into `searxng_engines_unavailable`.
+  if (results.length === 0) {
+    await runPass(engines, wantedPages, null);
+    if (results.length > 0) languageDropped = true;
+  }
 
   // A sparse answer usually means the primary pair was rate-limited or blocked for this query.
   // One extra pass on the independent engines is cheaper than failing the user's job, and it is
@@ -478,6 +499,7 @@ export async function searxngSearch(
     results: results.slice(0, want),
     engines,
     unresponsiveEngines: unresponsive,
+    ...(languageDropped ? { languageDropped: true } : {}),
     tookMs,
     cached: false,
   };

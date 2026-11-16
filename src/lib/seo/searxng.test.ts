@@ -159,7 +159,33 @@ test("searxngSearch retries sparse answers on the fallback engines only", async 
   assert.equal(result.results.length, 1);
   assert.equal(result.results[0].domain, "fallback.example");
   assert.equal(result.engines?.includes("duckduckgo"), true);
-  assert.equal(bodies.length, 2);
+  // Primary pass + the zero-results language retry on the same engines, then the fallback pass.
+  assert.equal(bodies.length, 3);
+});
+
+test("searxngSearch retries without the language filter when a language-scoped pass returns zero", async () => {
+  // The measured case: bing answers a *successful* zero for any Arabic language code, and the
+  // same engines return results without the language param. The retry must recover the rows and
+  // flag that language scoping was dropped — not fabricate anything.
+  resetEnv();
+  const bodies: string[] = [];
+  const rows = [{ url: "https://site.example/page", title: "Site", content: "hit", engines: ["bing"] }];
+  const fetchImpl = fakeFetch((_url, init) => {
+    const body = new URLSearchParams(String(init?.body));
+    bodies.push(body.get("language") ?? "");
+    if (body.get("language")) return jsonResponse(payload([]));
+    return jsonResponse(payload(rows));
+  });
+  const result = await searxngSearch("", "علاج سرعة القذف", { gl: "eg", hl: "ar", num: 10 }, { fetchImpl });
+  assert.equal(result.error, undefined);
+  assert.equal(result.results.length, 1);
+  assert.equal(result.results[0].domain, "site.example");
+  assert.equal(result.languageDropped, true);
+  // First pass carried the language param; the retry stripped it; the sparse-answer fallback
+  // still runs after (one row < 3) and is deduped away.
+  assert.equal(bodies.length, 3);
+  assert.equal(bodies[0], "ar");
+  assert.equal(bodies[1], "");
 });
 
 test("searxngSearch classifies timeouts without returning results", async () => {
