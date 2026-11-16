@@ -5956,5 +5956,21 @@
   "chainReason_other": "Other",
   "annAutoBadge": "auto",
   "drSource": "Domain Rating — Ahrefs DR scale via GoAnyAPI",
-  "drVia": "DR via GoAnyAPI"
+  "drVia": "DR via GoAnyAPI",
+  "lwLoadFailed": "Couldn't load the watch list — check your connection and try again.",
+  "geoAnalysisFailedChip": "Analysis failed",
+  "geoAnalysisFailedNote": "The AI analysis step failed. The metrics, batches and citations below are measured data — but the classification, insights and coverage notes are template placeholders, not findings.",
+  "seoCaProgressEstimate": "estimate",
+  "seoCitSearxngHint": "SearXNG returns up to 50 results.",
+  "seoHistIndexFailed": "Couldn't refresh the history index from the server — showing the local cache.",
+  "seoHistClearHint": "Clears the local cache only — the server-side history stays.",
+  "seoHistClearConfirm": "Clear the local history cache? The server copy is kept and restored on the next sign-in.",
+  "seoHistFilterCluster": "Clusters",
+  "plgSiteHint": "Your own site — matches on its host are tagged as own-site, not plagiarism.",
+  "plgNoSite": "No site (own-site detection off)",
+  "locCitUncheckedHint": "New rows stay «unchecked» until you press Refresh — or the scheduled check runs.",
+  "fpIgnoreFail": "Couldn't save the hide/unhide action — try again.",
+  "rwSaveToHistory": "Save to History",
+  "rwSavedHistory": "Saved",
+  "rwSaveHistHint": "Saves this variant into History (as a text article) so it survives a reload."
 }

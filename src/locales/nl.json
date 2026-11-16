@@ -5956,5 +5956,21 @@
   "chainReason_other": "Overig",
   "annAutoBadge": "auto",
   "drSource": "Domain Rating — Ahrefs-DR-schaal via GoAnyAPI",
-  "drVia": "DR via GoAnyAPI"
+  "drVia": "DR via GoAnyAPI",
+  "lwLoadFailed": "Lijst kon niet worden geladen — controleer de verbinding en probeer opnieuw.",
+  "geoAnalysisFailedChip": "Analyse mislukt",
+  "geoAnalysisFailedNote": "De AI-analysestap is mislukt. De meetwaarden, batches en citaten hieronder zijn gemeten gegevens — de classificatie, inzichten en dekkingsnotities zijn sjablonen, geen bevindingen.",
+  "seoCaProgressEstimate": "schatting",
+  "seoCitSearxngHint": "SearXNG levert maximaal 50 resultaten.",
+  "seoHistIndexFailed": "De geschiedenisindex kon niet van de server worden vernieuwd — lokale cache wordt getoond.",
+  "seoHistClearHint": "Wist alleen de lokale cache — de geschiedenis op de server blijft staan.",
+  "seoHistClearConfirm": "Lokale geschiedenis-cache wissen? De serverkopie blijft bewaard en wordt bij de volgende login hersteld.",
+  "seoHistFilterCluster": "Clusters",
+  "plgSiteHint": "Eigen site — treffers op de host worden gemarkeerd als eigen site, niet als plagiaat.",
+  "plgNoSite": "Geen site (eigen-site-detectie uit)",
+  "locCitUncheckedHint": "Nieuwe rijen blijven «ongcontroleerd» tot je Vernieuwen drukt — of de geplande controle draait.",
+  "fpIgnoreFail": "Verbergen/tonen kon niet worden opgeslagen — probeer opnieuw.",
+  "rwSaveToHistory": "Opslaan in geschiedenis",
+  "rwSavedHistory": "Opgeslagen",
+  "rwSaveHistHint": "Slaat deze variant op in de geschiedenis (als artikel), zodat een reload hem niet verliest."
 }

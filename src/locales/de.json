@@ -5956,5 +5956,21 @@
   "chainReason_other": "Sonstiges",
   "annAutoBadge": "auto",
   "drSource": "Domain Rating — Ahrefs-DR-Skala über GoAnyAPI",
-  "drVia": "DR über GoAnyAPI"
+  "drVia": "DR über GoAnyAPI",
+  "lwLoadFailed": "Liste konnte nicht geladen werden – Verbindung prüfen und erneut versuchen.",
+  "geoAnalysisFailedChip": "Analyse fehlgeschlagen",
+  "geoAnalysisFailedNote": "Der KI-Analyseschritt ist fehlgeschlagen. Die Kennzahlen, Batches und Zitate unten sind Messwerte – Klassifikation, Insights und Abdeckungshinweise sind dagegen Platzhalter, keine Befunde.",
+  "seoCaProgressEstimate": "Schätzung",
+  "seoCitSearxngHint": "SearXNG liefert bis zu 50 Ergebnisse.",
+  "seoHistIndexFailed": "Der Verlaufsindex konnte nicht vom Server aktualisiert werden – lokaler Cache wird angezeigt.",
+  "seoHistClearHint": "Löscht nur den lokalen Cache – der serverseitige Verlauf bleibt erhalten.",
+  "seoHistClearConfirm": "Lokalen Verlaufs-Cache leeren? Die Serverkopie bleibt erhalten und wird beim nächsten Login wiederhergestellt.",
+  "seoHistFilterCluster": "Cluster",
+  "plgSiteHint": "Eigene Website – Treffer auf ihrem Host werden als „eigene Website“, nicht als Plagiat markiert.",
+  "plgNoSite": "Keine Website (Eigen-Erkennung aus)",
+  "locCitUncheckedHint": "Neue Zeilen bleiben „ungeprüft“, bis Sie Aktualisieren drücken – oder die geplante Prüfung läuft.",
+  "fpIgnoreFail": "Aus-/Einblenden konnte nicht gespeichert werden – erneut versuchen.",
+  "rwSaveToHistory": "Im Verlauf speichern",
+  "rwSavedHistory": "Gespeichert",
+  "rwSaveHistHint": "Speichert diese Variante im Verlauf (als Artikel), damit sie einen Reload überlebt."
 }

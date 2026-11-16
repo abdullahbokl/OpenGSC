@@ -5956,5 +5956,21 @@
   "chainReason_other": "Autre",
   "annAutoBadge": "auto",
   "drSource": "Domain Rating — échelle Ahrefs DR via GoAnyAPI",
-  "drVia": "DR via GoAnyAPI"
+  "drVia": "DR via GoAnyAPI",
+  "lwLoadFailed": "Impossible de charger la liste — vérifiez la connexion et réessayez.",
+  "geoAnalysisFailedChip": "Analyse échouée",
+  "geoAnalysisFailedNote": "L'étape d'analyse IA a échoué. Les métriques, lots et citations ci-dessous sont des données mesurées — mais la classification, les insights et les notes de couverture sont des gabarits, pas des conclusions.",
+  "seoCaProgressEstimate": "estimation",
+  "seoCitSearxngHint": "SearXNG renvoie jusqu'à 50 résultats.",
+  "seoHistIndexFailed": "Impossible d'actualiser l'index d'historique depuis le serveur — affichage du cache local.",
+  "seoHistClearHint": "Efface uniquement le cache local — l'historique côté serveur est conservé.",
+  "seoHistClearConfirm": "Vider le cache d'historique local ? La copie serveur est conservée et restaurée à la prochaine connexion.",
+  "seoHistFilterCluster": "Clusters",
+  "plgSiteHint": "Votre propre site — les correspondances avec son domaine sont marquées « site perso », pas plagiat.",
+  "plgNoSite": "Aucun site (détection « site perso » désactivée)",
+  "locCitUncheckedHint": "Les nouvelles lignes restent « non vérifiées » tant que vous n'avez pas lancé Actualiser — ou qu'aucune vérification planifiée n'a tourné.",
+  "fpIgnoreFail": "Impossible d'enregistrer le masquage/rétablissement — réessayez.",
+  "rwSaveToHistory": "Enregistrer dans l'historique",
+  "rwSavedHistory": "Enregistré",
+  "rwSaveHistHint": "Enregistre cette variante dans l'historique (comme un article) pour survivre à un rechargement."
 }

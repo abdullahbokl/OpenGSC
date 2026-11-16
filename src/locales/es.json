@@ -5956,5 +5956,21 @@
   "chainReason_other": "Otro",
   "annAutoBadge": "auto",
   "drSource": "Domain Rating: escala Ahrefs DR vía GoAnyAPI",
-  "drVia": "DR vía GoAnyAPI"
+  "drVia": "DR vía GoAnyAPI",
+  "lwLoadFailed": "No se pudo cargar la lista: comprueba la conexión e inténtalo de nuevo.",
+  "geoAnalysisFailedChip": "Análisis fallido",
+  "geoAnalysisFailedNote": "El paso de análisis con IA falló. Las métricas, lotes y citas de abajo son datos medidos; la clasificación, las ideas y las notas de cobertura son plantillas, no conclusiones.",
+  "seoCaProgressEstimate": "estimación",
+  "seoCitSearxngHint": "SearXNG devuelve hasta 50 resultados.",
+  "seoHistIndexFailed": "No se pudo actualizar el índice del historial desde el servidor: se muestra la caché local.",
+  "seoHistClearHint": "Solo borra la caché local: el historial del servidor se conserva.",
+  "seoHistClearConfirm": "¿Borrar la caché local del historial? La copia del servidor se conserva y se restaura al iniciar sesión de nuevo.",
+  "seoHistFilterCluster": "Clústeres",
+  "plgSiteHint": "Tu propio sitio: las coincidencias con su dominio se marcan como «sitio propio», no plagio.",
+  "plgNoSite": "Sin sitio (detección de sitio propio desactivada)",
+  "locCitUncheckedHint": "Las filas nuevas permanecen «sin comprobar» hasta que pulses Actualizar — o se ejecute la comprobación programada.",
+  "fpIgnoreFail": "No se pudo guardar ocultar/mostrar: inténtalo de nuevo.",
+  "rwSaveToHistory": "Guardar en el historial",
+  "rwSavedHistory": "Guardado",
+  "rwSaveHistHint": "Guarda esta variante en el historial (como artículo) para que sobreviva a una recarga."
 }

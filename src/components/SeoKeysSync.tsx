@@ -141,7 +141,7 @@ export default function SeoKeysSync() {
     patchLocalStorageOnce();
     let timer: ReturnType<typeof setInterval> | undefined;
     (async () => {
-      try { await pullAndRestore(); } catch { /* offline / not migrated — silent */ }
+      try { await pullAndRestore(); } catch (e) { /* offline / not migrated — logged, restored next tick */ console.warn("[SeoKeysSync] pull failed:", e); }
       // Ollama predates its native provider as "a custom OpenAI-compatible endpoint", so an
       // existing install keeps its Cloud key in the custom slot. Adopt it into the ollama slot
       // after the server snapshot is restored (the key may have arrived from the DB mirror) and
@@ -149,8 +149,8 @@ export default function SeoKeysSync() {
       try {
         if (adoptOllamaCloudCreds().adopted) window.dispatchEvent(new Event("seo-keys-restored"));
       } catch { /* nothing stored under custom — normal */ }
-      try { await pushIfChanged(); } catch { /* silent */ }
-      try { await syncHistoryFromServer(); } catch { /* silent */ }
+      try { await pushIfChanged(); } catch (e) { /* retried by the 20s tick — logged for diagnosability */ console.warn("[SeoKeysSync] push failed:", e); }
+      try { await syncHistoryFromServer(); } catch (e) { console.warn("[SeoKeysSync] history sync failed:", e); }
       timer = setInterval(() => { pushIfChanged().catch(() => {}); }, 20_000);
     })();
     const onHide = () => { if (document.visibilityState === "hidden") pushIfChanged().catch(() => {}); };

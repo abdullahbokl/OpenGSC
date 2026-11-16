@@ -5956,5 +5956,21 @@
   "chainReason_other": "其他",
   "annAutoBadge": "自动",
   "drSource": "Domain Rating——Ahrefs DR 量表，经由 GoAnyAPI",
-  "drVia": "DR 经由 GoAnyAPI"
+  "drVia": "DR 经由 GoAnyAPI",
+  "lwLoadFailed": "加载列表失败——请检查网络后重试。",
+  "geoAnalysisFailedChip": "分析失败",
+  "geoAnalysisFailedNote": "AI 分析步骤失败。下方的指标、批次与引用是实测数据——但分类、洞察和覆盖说明是模板占位内容，并非结论。",
+  "seoCaProgressEstimate": "估算",
+  "seoCitSearxngHint": "SearXNG 最多返回 50 条结果。",
+  "seoHistIndexFailed": "无法从服务器刷新历史索引——当前显示本地缓存。",
+  "seoHistClearHint": "仅清除本地缓存——服务器端的历史记录保留。",
+  "seoHistClearConfirm": "清除本地历史缓存？服务器副本会保留，并在下次登录时恢复。",
+  "seoHistFilterCluster": "聚类",
+  "plgSiteHint": "你的站点——与其域名的匹配会标记为“自有站点”，而非抄袭。",
+  "plgNoSite": "无站点（自有站点检测关闭）",
+  "locCitUncheckedHint": "新行会保持“未检查”，直到你点击“刷新”——或计划检查运行。",
+  "fpIgnoreFail": "隐藏/取消隐藏操作未能保存——请重试。",
+  "rwSaveToHistory": "保存到历史",
+  "rwSavedHistory": "已保存",
+  "rwSaveHistHint": "将此变体保存到历史（作为文章），刷新后不会丢失。"
 }

@@ -65,6 +65,7 @@ export default function FootprintPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setErr("");
@@ -86,10 +87,15 @@ export default function FootprintPage() {
   useEffect(() => { void load(); }, [load]);
 
   async function setIgnored(skeleton: string, hidden: boolean) {
-    await fetch("/api/footprint/ignore", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ skeleton, ignored: hidden }),
-    }).catch(() => {});
+    try {
+      const res = await fetch("/api/footprint/ignore", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skeleton, ignored: hidden }),
+      });
+      if (!res.ok) setNotice(t("fpIgnoreFail"));
+    } catch {
+      setNotice(t("fpIgnoreFail"));
+    }
     void load();
   }
 
@@ -141,6 +147,7 @@ export default function FootprintPage() {
 
       {err && <div className="panel" style={{ borderColor: "rgba(255,69,58,0.35)", color: "var(--color-accent-red)", fontSize: "12px" }}>{err}</div>}
       {report?.notMigrated && <div className="panel" style={{ fontSize: "12px", color: "var(--color-accent-orange)" }}>{tt("fpNotMigrated")}</div>}
+      {notice && <div className="panel" style={{ fontSize: "12px", color: "var(--color-accent-orange)" }}>{notice}</div>}
 
       {report && !report.notMigrated && (
         <>
