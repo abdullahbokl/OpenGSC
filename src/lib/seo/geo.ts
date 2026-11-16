@@ -369,9 +369,12 @@ async function runOllamaSerpSearch(
   });
 
   const model = analysis.model || defaultModelFor(analysis.provider);
+  // Same budget as the stage-2 analysis pass: a reasoning model spends its output on hidden
+  // reasoning first, and at 4000 tokens it could return nothing at all (measured on
+  // deepseek-v4.1-flash:1017 — finish_reason length, zero visible text).
   const answer = await fetchLLMDetailed(
     buildOllamaAnswerPrompt(query, language, country, pool, texts),
-    analysis.provider, analysis.apiKey, 4000, model || undefined, analysis.baseUrl,
+    analysis.provider, analysis.apiKey, 8000, model || undefined, analysis.baseUrl,
   );
   if (!answer.text) return { error: `geo_answer: ${answer.error ?? "no text"}` };
 
