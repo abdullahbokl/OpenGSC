@@ -8,7 +8,9 @@
 // attributes each A-Parser request to the project owner without threading a userId through runSerp.
 import { dbAny } from "@/lib/prisma";
 import { runSerp, type SerpOptions, type SerpResponse } from "@/lib/seo/serp";
-import { credsTag, getAparserServerCreds, type ServerAparserCreds } from "@/lib/seo/aparserServerCreds";
+import { searxngConfigured, SEARXNG_MAX_RESULTS } from "@/lib/seo/searxng";
+import { credsTag, getAparserServerCreds } from "@/lib/seo/aparserServerCreds";
+import type { AparserCredSource } from "@/lib/seo/aparserCredCandidates";
 
 import { hostOfUrl, ignorePredicate, parseHostList } from "./hosts";
 import { classifySnapshot } from "./noise";
@@ -39,6 +41,29 @@ const PROJECT_SELECT = {
   id: true, userId: true, country: true, lang: true, depth: true, ignoreHosts: true, aparserPreset: true,
 } as const;
 
+/**
+ * Where a run's SERP rows come from. A-Parser (the original engine, the only one that can reach
+ * past 50 rows and the only one with SE::Google presets) stays first when it is configured;
+ * SearXNG — the keyless self-hosted instance the rest of the app already uses — is the free
+ * default when it is not. Neither available → no_creds, and nothing is fabricated.
+ */
+export type SerpmonCreds =
+  | { provider: "aparser"; password: string; baseUrl?: string; configPreset?: string; source: AparserCredSource }
+  | { provider: "searxng" };
+
+export async function resolveSerpmonCreds(userId: string): Promise<SerpmonCreds | null> {
+  const aparser = await getAparserServerCreds(userId);
+  if (aparser) return { provider: "aparser", password: aparser.password, baseUrl: aparser.baseUrl, configPreset: aparser.configPreset, source: aparser.source };
+  if (searxngConfigured()) return { provider: "searxng" };
+  return null;
+}
+
+/** SearXNG caps one call at its own hard ceiling; the requested depth is clamped and recorded,
+ * so a "top-100" project on SearXNG honestly becomes a top-50 monitor rather than pretending. */
+function effectiveDepth(project: { depth: number }, creds: SerpmonCreds): number {
+  return creds.provider === "searxng" ? Math.min(project.depth, SEARXNG_MAX_RESULTS) : project.depth;
+}
+
 // ─── startRun ────────────────────────────────────────────────────────────────
 
 export async function startRun(
@@ -66,7 +91,7 @@ export async function startRun(
     }
   }
 
-  const creds = await getAparserServerCreds(userId);
+  const creds = await resolveSerpmonCreds(userId);
   if (!creds) return { error: "no_creds" };
 
   const planned = await db.serpKeyword.count({ where: { projectId, active: true } });
@@ -114,7 +139,7 @@ async function collectKeyword(
   keyword: { id: string; keyword: string; lastSnapshotId: string | null },
   project: ProjectLite,
   runId: string,
-  creds: ServerAparserCreds,
+  creds: SerpmonCreds,
   ignore: (host: string) => boolean,
   attempt = 1,
 ): Promise<KeywordOutcome> {
@@ -126,22 +151,37 @@ async function collectKeyword(
   let features: string[] = [];
   let prev: Awaited<ReturnType<typeof loadPrev>> | undefined;
 
+  // The depth recorded on the snapshot is the depth actually fetched — on SearXNG a top-100
+  // project clamps to the adapter's ceiling, and pretending otherwise would mislabel coverage.
+  const depth = effectiveDepth(project, creds);
+
   try {
     // T1 extends SerpOptions/SerpResponse with configPreset/totalCount/features; the casts keep
     // this file compiling against the pre-T1 type surface byte-for-byte.
-    const opts = {
-      gl: project.country,
-      hl: project.lang,
-      num: project.depth,
-      baseUrl: creds.baseUrl,
-      ...(creds.configPreset ? { configPreset: creds.configPreset } : {}),
-      aparserPreset: project.aparserPreset || "default",
-    } as SerpOptions;
-    const resp: SerpResponse = await runSerp("aparser", creds.password, keyword.keyword, opts);
+    let resp: SerpResponse;
+    if (creds.provider === "aparser") {
+      const opts = {
+        gl: project.country,
+        hl: project.lang,
+        num: depth,
+        baseUrl: creds.baseUrl,
+        ...(creds.configPreset ? { configPreset: creds.configPreset } : {}),
+        aparserPreset: project.aparserPreset || "default",
+      } as SerpOptions;
+      resp = await runSerp("aparser", creds.password, keyword.keyword, opts);
+    } else {
+      // SearXNG: keyless, server-side; engine "google" is the configured bing+google-cse set.
+      // No preset, no totalCount, no repairedRows — those panels are A-Parser-specific.
+      resp = await runSerp("searxng", "", keyword.keyword, {
+        gl: project.country, hl: project.lang, num: depth,
+      } as SerpOptions);
+    }
     const ext = resp as SerpResponse & { totalCount?: string; features?: string[] };
     totalCount = ext.totalCount ?? "";
     features = ext.features ?? [];
-    detail = ext.error ? sanitizeDetail(attemptTag(attempt) + (ext.errorDetail || ext.error) + credsTag(creds), creds.password) : null;
+    const providerTag = creds.provider === "aparser" ? credsTag(creds) : "";
+    const providerPassword = creds.provider === "aparser" ? creds.password : "";
+    detail = ext.error ? sanitizeDetail(attemptTag(attempt) + (ext.errorDetail || ext.error) + providerTag, providerPassword) : null;
 
     const seen = new Set<string>();
     rows = (ext.results ?? [])
@@ -163,14 +203,16 @@ async function collectKeyword(
     }
 
     const cls = classifySnapshot({
-      rows, depth: project.depth, totalCount, providerError: ext.error ?? null,
+      rows, depth, totalCount, providerError: ext.error ?? null,
     });
     status = cls.status;
     problem = cls.problem;
   } catch (e) {
     status = "failed";
     problem = "provider_error";
-    detail = sanitizeDetail(attemptTag(attempt) + (e instanceof Error ? e.message : String(e)) + credsTag(creds), creds.password);
+    const providerTag = creds.provider === "aparser" ? credsTag(creds) : "";
+    const providerPassword = creds.provider === "aparser" ? creds.password : "";
+    detail = sanitizeDetail(attemptTag(attempt) + (e instanceof Error ? e.message : String(e)) + providerTag, providerPassword);
     rows = [];
   }
 
@@ -182,7 +224,7 @@ async function collectKeyword(
     status,
     problem,
     detail,
-    depth: project.depth,
+    depth,
     totalCount,
     features,
     rows,
@@ -302,7 +344,7 @@ export async function advanceRun(runId: string, deadline: number): Promise<{ don
         await finalizeRun(runId);
         return { done: true, processed };
       }
-      const retryCreds = await getAparserServerCreds(project.userId);
+      const retryCreds = await resolveSerpmonCreds(project.userId);
       if (!retryCreds) {
         await finalizeRun(runId);
         return { done: true, processed };
@@ -322,7 +364,7 @@ export async function advanceRun(runId: string, deadline: number): Promise<{ don
 
     // Credentials re-checked per wave: losing them mid-run must read as no_creds on the remaining
     // keywords, not as one giant provider_error.
-    const creds = await getAparserServerCreds(project.userId);
+    const creds = await resolveSerpmonCreds(project.userId);
     if (!creds) {
       processed += await failRemainingNoCreds(runId, project.id, project.depth);
       await finalizeRun(runId);

@@ -4299,7 +4299,7 @@
   "serpmonNewProject": "Nouveau projet",
   "serpmonEmpty": "Aucun projet pour l'instant. Créez-en un pour commencer à collecter les instantanés SERP.",
   "serpmonNotMigrated": "Tables de base de données manquantes. Exécutez `npx prisma db push` et redémarrez.",
-  "serpmonNoAparser": "SERP Monitor nécessite A-Parser. Configurez-le dans Paramètres → SERP & scraping.",
+  "serpmonNoAparser": "Aucun fournisseur de recherche disponible. SERP Monitor fonctionne sur SearXNG auto-hébergé (sans clé) ou sur A-Parser — configurez l'un des deux dans Paramètres → SERP & scraping.",
   "serpmonOpenSettings": "Ouvrir les paramètres",
   "serpmonCostNote": "auto-hébergé · aucun coût par requête",
   "serpmonFieldName": "Nom",
@@ -5979,5 +5979,7 @@
   "gapFreeSerpFailed": "Échec de la récupération SERP — le moteur de recherche n'a renvoyé aucun résultat.",
   "geoOllamaNote": "Moteur Ollama : l'étape 1 collecte de vrais résultats de recherche via votre intégration de recherche (SearXNG ou votre clé Serper), et votre fournisseur d'IA actuel rédige la réponse sourcée et l'analyse à partir de ces sources. Chaque citation est vérifiée par rapport aux résultats collectés — Ollama ne cherche pas lui-même.",
   "geoNoSearchSource": "Aucune source de recherche disponible — configurez SearXNG ou ajoutez une clé Serper (Paramètres → SEO Tools). Aucun résultat n'a été fabriqué.",
-  "geoNoCitations": "La réponse de l'IA n'a cité aucun des résultats de recherche collectés — l'audit a été interrompu plutôt que sauvegardé avec des citations inventées. Réessayez ou choisissez un autre modèle."
+  "geoNoCitations": "La réponse de l'IA n'a cité aucun des résultats de recherche collectés — l'audit a été interrompu plutôt que sauvegardé avec des citations inventées. Réessayez ou choisissez un autre modèle.",
+  "serpmonSearxngNote": "Fonctionne sur votre SearXNG auto-hébergé — gratuit et sans clé. Les instantanés couvrent le top 50 (plafond de SearXNG) ; configurez A-Parser pour une profondeur top 100.",
+  "serpmonSearxngDepthHint": "SearXNG renvoie jusqu'à 50 résultats par requête ; la profondeur est plafonnée à 50 tant que A-Parser n'est pas configuré."
 }

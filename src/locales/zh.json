@@ -4299,7 +4299,7 @@
   "serpmonNewProject": "新建项目",
   "serpmonEmpty": "暂无项目。创建一个项目即可开始收集 SERP 快照。",
   "serpmonNotMigrated": "缺少数据库表。请运行 `npx prisma db push` 并重启。",
-  "serpmonNoAparser": "SERP Monitor 需要 A-Parser。请在设置 → SERP 与抓取中配置。",
+  "serpmonNoAparser": "没有可用的搜索提供商。SERP Monitor 运行在自托管 SearXNG（免密钥）或 A-Parser 上——请在“设置 → SERP & scraping”中配置其一。",
   "serpmonOpenSettings": "打开设置",
   "serpmonCostNote": "自建服务 · 无按次请求费用",
   "serpmonFieldName": "名称",
@@ -5979,5 +5979,7 @@
   "gapFreeSerpFailed": "SERP 拉取失败——搜索后端未返回任何结果。",
   "geoOllamaNote": "Ollama 引擎：第 1 阶段通过您的搜索集成（SearXNG 或您的 Serper 密钥）收集真实搜索结果，由您当前的 AI 提供商基于这些来源撰写有据可依的回答和分析。每条引用都会与收集到的结果核对——Ollama 本身不进行搜索。",
   "geoNoSearchSource": "没有可用的搜索来源——请配置 SearXNG 或添加 Serper 密钥（设置 → SEO Tools）。未生成任何虚构结果。",
-  "geoNoCitations": "AI 回答未引用任何收集到的搜索结果——审计已中止，而不是带着虚构引用保存。请重试或更换模型。"
+  "geoNoCitations": "AI 回答未引用任何收集到的搜索结果——审计已中止，而不是带着虚构引用保存。请重试或更换模型。",
+  "serpmonSearxngNote": "运行在您的自托管 SearXNG 上——免费、免密钥。快照覆盖前 50 个结果（SearXNG 上限）；如需前 100 深度请配置 A-Parser。",
+  "serpmonSearxngDepthHint": "SearXNG 每次抓取最多返回 50 个结果；在配置 A-Parser 之前深度上限为 50。"
 }

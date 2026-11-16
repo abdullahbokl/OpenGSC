@@ -4299,7 +4299,7 @@
   "serpmonNewProject": "Neues Projekt",
   "serpmonEmpty": "Noch keine Projekte. Erstellen Sie eines, um SERP-Snapshots zu sammeln.",
   "serpmonNotMigrated": "Datenbanktabellen fehlen. Führen Sie `npx prisma db push` aus und starten Sie neu.",
-  "serpmonNoAparser": "SERP Monitor benötigt A-Parser. Konfigurieren Sie ihn unter Einstellungen → SERP & Scraping.",
+  "serpmonNoAparser": "Kein Suchanbieter verfügbar. SERP Monitor läuft auf selbst gehostetem SearXNG (schlüssellos) oder auf A-Parser – konfigurieren Sie einen davon unter Einstellungen → SERP & scraping.",
   "serpmonOpenSettings": "Einstellungen öffnen",
   "serpmonCostNote": "self-hosted · keine Kosten pro Anfrage",
   "serpmonFieldName": "Name",
@@ -5979,5 +5979,7 @@
   "gapFreeSerpFailed": "SERP-Abruf fehlgeschlagen – die Such-Backend lieferte keine Ergebnisse.",
   "geoOllamaNote": "Ollama-Engine: Stufe 1 sammelt echte Suchergebnisse über Ihre Suchintegration (SearXNG oder Ihren Serper-Schlüssel), und Ihr aktueller KI-Anbieter verfasst die belegte Antwort und die Analyse auf Basis dieser Quellen. Jede Quellenangabe wird gegen die gesammelten Ergebnisse geprüft – Ollama selbst sucht nicht.",
   "geoNoSearchSource": "Keine Suchquelle verfügbar – SearXNG konfigurieren oder einen Serper-Schlüssel hinzufügen (Einstellungen → SEO Tools). Es wurden keine Ergebnisse erfunden.",
-  "geoNoCitations": "Die KI-Antwort zitierte keines der gesammelten Suchergebnisse – der Audit wurde gestoppt statt mit erfundenen Quellenangaben gespeichert zu werden. Versuchen Sie es erneut oder wählen Sie ein anderes Modell."
+  "geoNoCitations": "Die KI-Antwort zitierte keines der gesammelten Suchergebnisse – der Audit wurde gestoppt statt mit erfundenen Quellenangaben gespeichert zu werden. Versuchen Sie es erneut oder wählen Sie ein anderes Modell.",
+  "serpmonSearxngNote": "Läuft auf Ihrem selbst gehosteten SearXNG – kostenlos und schlüssellos. Snapshots decken die Top 50 ab (SearXNG-Obergrenze); für Top-100-Tiefe A-Parser konfigurieren.",
+  "serpmonSearxngDepthHint": "SearXNG liefert bis zu 50 Ergebnisse pro Abruf; die Tiefe ist auf 50 begrenzt, solange kein A-Parser konfiguriert ist."
 }

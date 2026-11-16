@@ -12,6 +12,8 @@ import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { COUNTRIES, LANGUAGES, defaultLanguageFor } from "@/lib/seo/regions";
 import { SERPMON_DEPTHS, SERPMON_INTERVALS, SERPMON_MAX_KEYWORDS, type ProjectDetail } from "@/lib/serpmon/types";
 import { sendJson, trOf, btnGhost, btnPrimary, inputStyle } from "./shared";
+import { aparserConfiguredLocally } from "@/lib/seo/aparserConfigured";
+import { SEARXNG_MAX_RESULTS } from "@/lib/seo/searxng";
 
 export interface ImportInfo { added: number; duplicates: number; skipped: number }
 
@@ -27,12 +29,18 @@ export default function ProjectDialog({ project, onClose, onSaved }: {
   const { t } = useLanguage();
   const tr = trOf(t);
   const editing = project !== null;
+  // Which provider will actually serve the runs: A-Parser when this browser has it configured
+  // (the server re-resolves per run), SearXNG otherwise. SearXNG caps one pull at its own
+  // ceiling — the depth list is clamped and the A-Parser preset field disappears rather than
+  // collecting a value nothing will read.
+  const aparserLocal = aparserConfiguredLocally();
+  const depthOptions = aparserLocal ? SERPMON_DEPTHS : SERPMON_DEPTHS.filter(d => d <= SEARXNG_MAX_RESULTS);
 
   const [name, setName] = useState(project?.name ?? "");
   const [country, setCountry] = useState(project?.country ?? "");
   const [lang, setLang] = useState(project?.lang ?? "");
   const [countryQ, setCountryQ] = useState("");
-  const [depth, setDepth] = useState<number>(project?.depth ?? 100);
+  const [depth, setDepth] = useState<number>(project?.depth ?? (aparserLocal ? 100 : Math.min(100, SEARXNG_MAX_RESULTS)));
   const [intervalHours, setIntervalHours] = useState<number>(project?.intervalHours ?? 24);
   // Create-only: the raw import text. Edit mode sends keywords through the two explicit
   // buttons below instead.
@@ -218,8 +226,9 @@ export default function ProjectDialog({ project, onClose, onSaved }: {
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={labelStyle}>{tr("serpmonFieldDepth")}</span>
             <select style={inputStyle} value={depth} onChange={e => setDepth(Number(e.target.value))}>
-              {SERPMON_DEPTHS.map(d => <option key={d} value={d}>{d}</option>)}
+              {depthOptions.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
+            {!aparserLocal && <span style={hintStyle}>{tr("serpmonSearxngDepthHint")}</span>}
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={labelStyle}>{tr("serpmonFieldInterval")}</span>
@@ -298,13 +307,15 @@ export default function ProjectDialog({ project, onClose, onSaved }: {
           </label>
         </div>
 
-        {/* A-Parser preset */}
+        {/* A-Parser preset — only when A-Parser actually serves the runs. */}
+        {aparserLocal && (
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={labelStyle}>{tr("serpmonFieldAparserPreset")}</span>
           <input style={{ ...inputStyle, maxWidth: 260 }} value={aparserPreset} maxLength={100}
             placeholder="default" onChange={e => setAparserPreset(e.target.value)} />
           <span style={hintStyle}>{tr("serpmonAparserPresetHint")}</span>
         </label>
+        )}
 
         {/* Retention / notifications */}
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>

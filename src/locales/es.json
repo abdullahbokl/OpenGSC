@@ -4299,7 +4299,7 @@
   "serpmonNewProject": "Nuevo proyecto",
   "serpmonEmpty": "Aún no hay proyectos. Crea uno para empezar a recopilar capturas de la SERP.",
   "serpmonNotMigrated": "Faltan tablas en la base de datos. Ejecuta `npx prisma db push` y reinicia.",
-  "serpmonNoAparser": "SERP Monitor necesita A-Parser. Configúralo en Ajustes → SERP y scraping.",
+  "serpmonNoAparser": "No hay proveedor de búsqueda disponible. SERP Monitor funciona con SearXNG autoalojado (sin clave) o con A-Parser; configure uno en Ajustes → SERP & scraping.",
   "serpmonOpenSettings": "Abrir ajustes",
   "serpmonCostNote": "autoalojado · sin coste por solicitud",
   "serpmonFieldName": "Nombre",
@@ -5979,5 +5979,7 @@
   "gapFreeSerpFailed": "Fallo al obtener el SERP: el motor de búsqueda no devolvió resultados.",
   "geoOllamaNote": "Motor Ollama: la etapa 1 recopila resultados de búsqueda reales mediante su integración de búsqueda (SearXNG o su clave de Serper), y su proveedor de IA actual redacta la respuesta fundamentada y el análisis a partir de esas fuentes. Cada cita se verifica contra los resultados recopilados: Ollama no busca por sí mismo.",
   "geoNoSearchSource": "No hay fuente de búsqueda disponible: configure SearXNG o añada una clave de Serper (Ajustes → SEO Tools). No se fabricaron resultados.",
-  "geoNoCitations": "La respuesta de la IA no citó ninguno de los resultados de búsqueda recopilados: la auditoría se detuvo en lugar de guardarse con citas inventadas. Reintente o elija otro modelo."
+  "geoNoCitations": "La respuesta de la IA no citó ninguno de los resultados de búsqueda recopilados: la auditoría se detuvo en lugar de guardarse con citas inventadas. Reintente o elija otro modelo.",
+  "serpmonSearxngNote": "Funciona con su SearXNG autoalojado: gratis y sin clave. Las instantáneas cubren el top 50 (techo de SearXNG); configure A-Parser para una profundidad top 100.",
+  "serpmonSearxngDepthHint": "SearXNG devuelve hasta 50 resultados por consulta; la profundidad se limita a 50 hasta que se configure A-Parser."
 }

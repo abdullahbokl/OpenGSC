@@ -31,8 +31,9 @@ export default function SerpMonitorPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [savedNote, setSavedNote] = useState("");
   // This browser's answer first (no request, no flash); the server is only asked when the
-  // local answer is "no" — same two-source check as the nav item and /aparser.
-  const [aparser, setAparser] = useState<boolean | null>(aparserConfiguredLocally());
+  // local answer is "no" — same two-source check as the nav item and /aparser. When neither
+  // A-Parser nor SearXNG answers, the tool is genuinely unavailable and says so.
+  const [provider, setProvider] = useState<"aparser" | "searxng" | null>(aparserConfiguredLocally() ? "aparser" : null);
 
   const load = useCallback(async () => {
     setError("");
@@ -53,13 +54,21 @@ export default function SerpMonitorPage() {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    if (aparser) return;
+    if (provider === "aparser") return;
     let alive = true;
     void isAparserConfigured().then(ok => {
-      if (alive && ok) setAparser(true);
+      if (alive && ok) setProvider("aparser");
     });
+    if (provider === null) {
+      // SearXNG runs server-side and keyless — the status endpoint answers with a real search,
+      // so "available" means it actually serves results, not that a socket is open.
+      void fetch("/api/seo/serp/searxng/status")
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => { if (alive && d?.ok) setProvider("searxng"); })
+        .catch(() => {});
+    }
     return () => { alive = false; };
-  }, [aparser]);
+  }, [provider]);
 
   const onSaved = (p: ProjectSummary, imp: ImportInfo | null) => {
     setDialogOpen(false);
@@ -97,10 +106,21 @@ export default function SerpMonitorPage() {
         </div>
       )}
 
-      {aparser === false && (
+      {provider === null && (
         <div className="panel" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <AlertTriangle size={15} color="var(--color-accent-orange)" />
           <span style={{ color: "var(--color-text-secondary)" }}>{tr("serpmonNoAparser")}</span>
+          <Link href="/settings?tab=serp" style={{ color: "var(--color-accent-blue)", textDecoration: "none" }}>
+            {tr("serpmonOpenSettings")} →
+          </Link>
+        </div>
+      )}
+
+      {/* SearXNG serving the runs: said on screen, because the depth ceiling (50) and the free
+          default are things the user should know before comparing projects across providers. */}
+      {provider === "searxng" && (
+        <div className="panel" style={{ fontSize: 12.5, color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {tr("serpmonSearxngNote")}
           <Link href="/settings?tab=serp" style={{ color: "var(--color-accent-blue)", textDecoration: "none" }}>
             {tr("serpmonOpenSettings")} →
           </Link>

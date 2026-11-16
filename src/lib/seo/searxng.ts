@@ -25,7 +25,10 @@ const DEFAULT_CACHE_TTL_MS = 5 * 60_000;
 const DEFAULT_CONCURRENCY = 4;
 const MAX_CACHE_ENTRIES = 300;
 const MAX_PAGES = 3;
-const MAX_RESULTS = 50;
+/** Hard ceiling of one searxngSearch call — callers that promise more depth than this (SERP
+ * Monitor's top-100) must clamp and say so instead of letting the adapter silently truncate. */
+export const SEARXNG_MAX_RESULTS = 50;
+const MAX_RESULTS = SEARXNG_MAX_RESULTS;
 const STATUS_CACHE_MS = 30_000;
 
 export interface SearxngStatus {

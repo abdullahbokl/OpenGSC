@@ -4299,7 +4299,7 @@
   "serpmonNewProject": "Nieuw project",
   "serpmonEmpty": "Nog geen projecten. Maak er een aan om SERP-momentopnames te gaan verzamelen.",
   "serpmonNotMigrated": "Databasetabellen ontbreken. Voer `npx prisma db push` uit en herstart.",
-  "serpmonNoAparser": "SERP Monitor heeft A-Parser nodig. Configureer het onder Instellingen → SERP & scraping.",
+  "serpmonNoAparser": "Geen zoekprovider beschikbaar. SERP Monitor draait op zelf gehoste SearXNG (sleutelloos) of op A-Parser — configureer er een in Instellingen → SERP & scraping.",
   "serpmonOpenSettings": "Instellingen openen",
   "serpmonCostNote": "zelf gehost · geen kosten per verzoek",
   "serpmonFieldName": "Naam",
@@ -5979,5 +5979,7 @@
   "gapFreeSerpFailed": "SERP-ophaal mislukt — de zoek-backend leverde geen resultaten.",
   "geoOllamaNote": "Ollama-engine: fase 1 verzamelt echte zoekresultaten via uw zoekintegratie (SearXNG of uw Serper-sleutel), en uw huidige AI-provider schrijft het onderbouwde antwoord en de analyse op basis van die bronnen. Elke citatie wordt gecontroleerd aan de hand van de verzamelde resultaten — Ollama zoekt zelf niet.",
   "geoNoSearchSource": "Geen zoekbron beschikbaar — configureer SearXNG of voeg een Serper-sleutel toe (Instellingen → SEO Tools). Er zijn geen resultaten verzonnen.",
-  "geoNoCitations": "Het AI-antwoord citeerde geen enkele verzamelde zoekresultaat — de audit is gestopt in plaats van opgeslagen met verzonnen citaties. Probeer het opnieuw of kies een ander model."
+  "geoNoCitations": "Het AI-antwoord citeerde geen enkele verzamelde zoekresultaat — de audit is gestopt in plaats van opgeslagen met verzonnen citaties. Probeer het opnieuw of kies een ander model.",
+  "serpmonSearxngNote": "Draait op uw zelf gehoste SearXNG — gratis en sleutelloos. Snapshots dekken de top 50 (SearXNG-plafond); configureer A-Parser voor top-100 diepte.",
+  "serpmonSearxngDepthHint": "SearXNG levert maximaal 50 resultaten per ophaal; de diepte is beperkt tot 50 zolang A-Parser niet is geconfigureerd."
 }

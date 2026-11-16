@@ -4299,7 +4299,7 @@
   "serpmonNewProject": "New project",
   "serpmonEmpty": "No projects yet. Create one to start collecting SERP snapshots.",
   "serpmonNotMigrated": "Database tables are missing. Run `npx prisma db push` and restart.",
-  "serpmonNoAparser": "SERP Monitor needs A-Parser. Configure it in Settings → SERP & scraping.",
+  "serpmonNoAparser": "No search provider available. SERP Monitor runs on the self-hosted SearXNG (keyless) or on A-Parser — configure one in Settings → SERP & scraping.",
   "serpmonOpenSettings": "Open settings",
   "serpmonCostNote": "self-hosted · no per-request cost",
   "serpmonFieldName": "Name",
@@ -5979,5 +5979,7 @@
   "gapFreeSerpFailed": "SERP pull failed — the search backend returned no results.",
   "geoOllamaNote": "Ollama engine: stage 1 collects real search results via your search integration (SearXNG, or your Serper key), and your current AI provider writes the grounded answer and the analysis over those sources. Every citation is checked against the collected results — Ollama itself does not search.",
   "geoNoSearchSource": "No search source available — configure SearXNG or add a Serper key (Settings → SEO Tools). No results were fabricated.",
-  "geoNoCitations": "The AI answer cited none of the collected search results — the audit was stopped rather than saved with invented citations. Try again or pick a different model."
+  "geoNoCitations": "The AI answer cited none of the collected search results — the audit was stopped rather than saved with invented citations. Try again or pick a different model.",
+  "serpmonSearxngNote": "Runs on your self-hosted SearXNG — free, keyless. Snapshots cover the top 50 results (SearXNG's ceiling); configure A-Parser for top-100 depth.",
+  "serpmonSearxngDepthHint": "SearXNG serves up to 50 results per pull; depth is capped at 50 unless A-Parser is configured."
 }
