@@ -6,6 +6,8 @@ import { RefreshCw, Loader2, AlertTriangle, Copy, Check, Download, Sparkles, Lin
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { readUrlParam, writeUrlParam } from "@/lib/urlParam";
 import { getTaskCreds, getFirecrawlKey , aiCredsReady } from "@/lib/seo/keys";
+import { loadPolicies, getActivePolicyName } from "@/lib/seo/keys";
+import { addHistory } from "@/lib/seo/history";
 import { LANGUAGES } from "@/lib/seo/regions";
 import { TONES } from "@/lib/seo/tones";
 import { scoreText } from "@/lib/seo/aidetect";
@@ -170,6 +172,8 @@ export default function RewritePage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [results, setResults] = useState<Variant[] | null>(null);
+  // Which variants the user explicitly saved to History (addHistory pushes server-side too).
+  const [savedHist, setSavedHist] = useState<Set<number>>(new Set());
   const [snippet, setSnippet] = useState<Snippet | null>(null);
   const [wantSnippet, setWantSnippet] = useState(true);
   const [copied, setCopied] = useState<number | null>(null);
@@ -218,6 +222,9 @@ export default function RewritePage() {
           text: mode === "text" ? text : undefined,
           url: mode === "url" ? url.trim() : undefined,
           variants, maskAI, judge,
+          // The active editorial policy travels like on outline/text/landing — rewrite.ts
+          // renders it as the prompt prefix and keeps tone single-sourced from it.
+          policy: loadPolicies().find(p => p.name === getActivePolicyName()) || undefined,
           language: langObj?.label || "",
           tone: toneObj?.prompt || "",
           // Concrete vocabulary from the fingerprint model — a constraint the model can act on,
@@ -261,6 +268,13 @@ export default function RewritePage() {
   }
 
   const copy = (i: number, s: string) => { navigator.clipboard.writeText(s).then(() => { setCopied(i); setTimeout(() => setCopied(null), 1500); }).catch(() => {}); };
+  // Opt-in persistence (see the button comment): the variant lands in the local History cache
+  // and, via the debounced sync, in the server copy — surviving reloads on any device.
+  function saveToHistory(i: number, v: Variant) {
+    const label = mode === "url" ? url : (text.slice(0, 60) || "rewrite");
+    addHistory({ type: "text", keyword: label, data: v.content, meta: { promptType: "rewrite", version: `${i + 1}/${results?.length ?? 0}` } });
+    setSavedHist(prev => new Set([...prev, i]));
+  }
   // Name the file after the page's own slug — "rewrite-1.txt" is unidentifiable once several
   // downloads sit in the same folder. Variants past the first get a numeric suffix.
   const download = (i: number, s: string, format: ExportFormat) => {
@@ -474,6 +488,15 @@ export default function RewritePage() {
             </button>
             <button onClick={() => copy(i, v.content)} style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "5px 11px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text-secondary)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
               {copied === i ? <><Check size={13} color="#34c759" /> {t("rwCopied")}</> : <><Copy size={13} /> {t("rwCopy")}</>}
+            </button>
+            {/* Explicit, opt-in persistence: rewrite results live only in this page's state —
+                a reload loses them. Saved as type "text" so the History detail view and the
+                Publish dialog treat it like any article. The MCP-batch exclusion in
+                IMPORTABLE_TYPES is untouched: this is a user action, not an automatic import. */}
+            <button onClick={() => saveToHistory(i, v)} disabled={savedHist.has(i)}
+              title={t("rwSaveHistHint" as never)}
+              style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "5px 11px", borderRadius: "8px", border: `1px solid ${savedHist.has(i) ? "var(--color-accent-green)" : "var(--color-border)"}`, background: "var(--color-card)", color: savedHist.has(i) ? "#34c759" : "var(--color-text-secondary)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+              {savedHist.has(i) ? <><Check size={13} color="#34c759" /> {t("rwSavedHistory" as never)}</> : <><FileText size={13} /> {t("rwSaveToHistory" as never)}</>}
             </button>
             {/* One download control per format. The rewrite keeps its heading tree, so .md and
                 .html carry structure a .txt would flatten. */}

@@ -78,6 +78,9 @@ export default function AnalysisPage() {
   }, []);
 
   function startTimer() {
+    // The bar is an ESTIMATE, not real progress: the job runner reports no per-step completion,
+    // so the bar climbs on a clock and jumps to 100 when the job actually finishes. The label
+    // below the bar says so.
     setElapsed(0); setProgress(4);
     const t0 = Date.now();
     timer.current = setInterval(() => {
@@ -149,7 +152,9 @@ export default function AnalysisPage() {
       const competitors = compUrls.map((url, i) => {
         const p = pages.find((x) => x.url === url);
         const s = serpByUrl[url];
-        return { position: s?.position || i + 1, url, site_type: s?.site_type || undefined, title: p?.title || s?.title || url, headings: p?.headings || [], word_count: p?.wordCount || 0, has_price_table: !!p?.hasPriceTable, has_faq: !!p?.hasFaq };
+        // A competitor the scraper could not read must be named as such — word_count 0 with no
+        // flag would hand the model a thin page and let it draw conclusions from an empty shell.
+        return { position: s?.position || i + 1, url, site_type: s?.site_type || undefined, title: p?.title || s?.title || url, headings: p?.headings || [], word_count: p?.wordCount || 0, has_price_table: !!p?.hasPriceTable, has_faq: !!p?.hasFaq, ...(p ? {} : { scrape_failed: true }) };
       });
       const targetPage = { url: targetUrl, title: target?.title, meta: target?.metaDescription, headings: target?.headings || [], word_count: target?.wordCount || 0, has_price_table: !!target?.hasPriceTable, has_faq: !!target?.hasFaq, text_sample: target?.textSample };
 
@@ -292,7 +297,7 @@ export default function AnalysisPage() {
               <div style={{ width: `${progress}%`, height: "100%", background: "var(--color-text-primary)", transition: "width 0.6s" }} />
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--color-text-secondary)" }}>
-              <span>{Math.round(progress)}%</span><span>{stage}</span>
+              <span>{Math.round(progress)}% <span style={{ color: "var(--color-text-tertiary)" }}>({t("seoCaProgressEstimate")})</span></span><span>{stage}</span>
             </div>
             <div style={{ marginTop: "16px", padding: "13px 15px", borderRadius: "10px", background: "rgba(41,151,255,0.06)", border: "1px solid rgba(41,151,255,0.25)", fontSize: "13px", color: "var(--color-text-secondary)" }}>
               {t("seoCaAnalyzingHint")} · {t("seoCaElapsed")}: {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}

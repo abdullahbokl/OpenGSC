@@ -53,15 +53,22 @@ const lim = (v: number | null, dflt: number, max: number) => {
   return Math.min(max, Math.max(1, Math.floor(n)));
 };
 
+/** Thin-index page size: the newest N records the client's index view needs. */
+const HISTORY_INDEX_LIMIT = 500;
+
 export async function GET(req: Request) {
   const userId = await uid();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const sp = new URL(req.url).searchParams;
   try {
     if (sp.get("index")) {
+      // Bounded: the newest 500 records. The index is polled for counts and recent entries, so
+      // an unbounded query would slowly turn every poll into a full-table scan as history grows;
+      // older rows stay fully readable via ?ids= (they simply stop appearing in the thin index).
       const rows: HistoryThinRow[] = await rawQuery(
-        `SELECT id, type, keyword, status, createdAt FROM "SeoHistory" WHERE userId = ? ORDER BY createdAt DESC, id DESC`, userId);
-      return NextResponse.json({ rows: rows.map(thinRow), total: rows.length });
+        `SELECT id, type, keyword, status, createdAt FROM "SeoHistory" WHERE userId = ? ORDER BY createdAt DESC, id DESC LIMIT ?`, userId, HISTORY_INDEX_LIMIT);
+      const totalRows: { n: number }[] = await rawQuery(`SELECT COUNT(*) AS n FROM "SeoHistory" WHERE userId = ?`, userId);
+      return NextResponse.json({ rows: rows.map(thinRow), total: Number(totalRows?.[0]?.n ?? rows.length), truncated: rows.length >= HISTORY_INDEX_LIMIT });
     }
     const idsParam = sp.get("ids");
     if (idsParam) {

@@ -81,7 +81,10 @@ export default function TextGenPage() {
     if (!outline) { setErr(t("seoSelectStructureFirst")); return; }
     const { provider, apiKey, model, baseUrl } = getTaskCreds("text");
     if (!apiKey) { setErr(t("seoErrNoAiKey")); return; }
-    const policy = loadPolicies().find(p => p.name === policyName) || loadPolicies()[0];
+    // Fall back to NO policy, never an unrelated alphabetical-first one — policies are sorted
+    // alphabetically on save, so `[0]` would silently apply rules nobody selected when the
+    // active policy was renamed or deleted.
+    const policy = loadPolicies().find(p => p.name === policyName) || null;
     const resolvedTone = tone ? toneToPrompt(tone) : toneToPrompt(policy?.voice?.toneOfVoice || "");
 
     setLoading(true); setErr("");

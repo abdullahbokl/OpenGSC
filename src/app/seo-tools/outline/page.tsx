@@ -165,7 +165,10 @@ export default function OutlinePage() {
   const ai = mounted ? getSeoGenCreds() : { provider: "", apiKey: "", model: "" };
   const serpCreds = mounted ? getSerpCreds() : { provider: "", apiKey: "" };
   const serpReady = useSerpReadiness(serpCreds);
-  const activePolicy = mounted ? (loadPolicies().find(p => p.name === getActivePolicyName()) || loadPolicies()[0]) : null;
+  // Fall back to NO policy rather than an unrelated one: policies are sorted alphabetically on
+  // save, so `[0]` would silently apply the first-named policy when the active one is renamed
+  // or deleted — the text would ship under rules nobody selected.
+  const activePolicy = mounted ? (loadPolicies().find(p => p.name === getActivePolicyName()) || null) : null;
 
   const resolveTone = () => tone === "custom" ? customTone
     : tone ? toneToPrompt(tone)

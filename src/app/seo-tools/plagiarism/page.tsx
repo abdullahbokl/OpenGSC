@@ -90,6 +90,11 @@ export default function PlagiarismPage() {
   const [text, setText] = useState("");
   const [historyId, setHistoryId] = useState("");
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
+  // Own-site classification: matches on this site's host are tagged as "own site" instead of
+  // counting as external plagiarism evidence. Needs an explicit siteId — the checker matches
+  // the Site row's hostname against SERP hit URLs.
+  const [siteId, setSiteId] = useState("");
+  const [sites, setSites] = useState<{ id: string; url: string }[]>([]);
   const [estimate, setEstimate] = useState<EstimateUi | null>(null);
   const [run, setRun] = useState<ResultUi | null>(null);
   const [busy, setBusy] = useState(false);
@@ -132,6 +137,13 @@ export default function PlagiarismPage() {
         const d = await res.json();
         setHistoryList(((d?.rows ?? []) as HistoryItem[]).filter((r) => r.type === "text").slice(0, 50));
       } catch { /* picker stays empty; pasting always works */ }
+      try {
+        const res = await fetch("/api/gsc/sites");
+        if (res.ok) {
+          const d = await res.json();
+          setSites(((d?.sites ?? []) as { id: string; url: string }[]));
+        }
+      } catch { /* selector stays empty; own-site tagging stays off */ }
     })();
   }, []);
 
@@ -184,7 +196,7 @@ export default function PlagiarismPage() {
     try {
       const res = await fetch("/api/seo/plagiarism", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(historyId ? { historyId, confirm: true } : { text, confirm: true }),
+        body: JSON.stringify({ ...(historyId ? { historyId } : { text }), siteId: siteId || undefined, confirm: true }),
       });
       const d = await res.json().catch(() => ({}));
       if (d.notMigrated) { setMsg(t("autoSyncNotMigrated")); setBusy(false); return; }
@@ -247,6 +259,18 @@ export default function PlagiarismPage() {
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <span className="tool-field-label">{t("plgPaste")}</span>
           <span style={{ flex: 1 }} />
+          <select
+            className="tool-input"
+            style={{ maxWidth: "220px" }}
+            value={siteId}
+            onChange={(e) => setSiteId(e.target.value)}
+            title={t("plgSiteHint")}
+          >
+            <option value="">{t("plgNoSite")}</option>
+            {sites.map((st) => (
+              <option key={st.id} value={st.id}>{st.url.replace(/^https?:\/\//, "").slice(0, 40)}</option>
+            ))}
+          </select>
           <select
             className="tool-input"
             style={{ maxWidth: "320px" }}

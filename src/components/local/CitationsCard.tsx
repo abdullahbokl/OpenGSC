@@ -97,7 +97,11 @@ export default function CitationsCard({ siteId, hasProfile }: { siteId: string; 
       </div>
 
       {rows && rows.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
+        <>
+          {rows.some(r => r.status === "unchecked") && (
+            <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>{t("locCitUncheckedHint")}</div>
+          )}
+          <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
             <thead>
               <tr>
@@ -137,7 +141,8 @@ export default function CitationsCard({ siteId, hasProfile }: { siteId: string; 
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       <div>

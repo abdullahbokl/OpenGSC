@@ -155,8 +155,12 @@ export default function CitationsPage() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", fontSize: "12px", color: "var(--color-text-secondary)" }}>
             <label htmlFor="cit-limit">{t("seoCitLimit")}</label>
             <select id="cit-limit" className="tool-input" style={{ width: "auto", padding: "5px 8px" }} value={limit} onChange={e => setLimit(Number(e.target.value))}>
-              {[24, 48, 96, 150].map(n => <option key={n} value={n}>{n}</option>)}
+              {(dfsKey ? [24, 48, 96, 150] : [24, 48]).map(n => <option key={n} value={n}>{n}</option>)}
             </select>
+            {/* SearXNG hard-caps a single search at 50 results — larger limits silently produced
+                fewer rows than the selector promised. The cap is named, and the DFS path keeps
+                the full range. */}
+            {!dfsKey && <span style={{ color: "var(--color-text-tertiary)" }}>{t("seoCitSearxngHint")}</span>}
           </div>
         )}
       </div>

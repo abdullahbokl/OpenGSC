@@ -76,6 +76,7 @@ export default function HistoryPage() {
   // and counts run over the whole history without shipping megabytes), with the local cache
   // merged on top (fresh records that exist nowhere else yet, plus full bodies for scoring).
   const [rows, setRows] = useState<HistoryItem[]>([]);
+  const [indexErr, setIndexErr] = useState("");
   const [jobs, setJobs] = useState<SeoJobRec[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
@@ -105,13 +106,18 @@ export default function HistoryPage() {
   async function refreshIndex() {
     try {
       const res = await fetch("/api/seo/history?index=1", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) { setIndexErr(t("seoHistIndexFailed")); return; }
       const d = await res.json();
       const thin: HistoryItem[] = Array.isArray(d?.rows)
         ? d.rows.map((r: Pick<HistoryItem, "id" | "type" | "keyword" | "status" | "createdAt">) => ({ id: r.id, type: r.type, keyword: r.keyword, status: r.status, createdAt: r.createdAt, data: undefined }))
         : [];
       mergeIntoRows(thin);
-    } catch { /* offline — the local cache still shows */ }
+      setIndexErr("");
+    } catch {
+      // Offline: the local cache still shows, but the failure is named — the list must not
+      // silently read as "the whole history" when the server index never arrived.
+      setIndexErr(t("seoHistIndexFailed"));
+    }
   }
 
   // Pull server-side background jobs: import finished ones into the History store, keep showing
@@ -150,6 +156,7 @@ export default function HistoryPage() {
     analysis: rows.filter(i => i.type === "analysis").length,
     landing: rows.filter(i => i.type === "landing").length,
     googlebot: rows.filter(i => i.type === "googlebot").length,
+    cluster: rows.filter(i => i.type === "cluster").length,
   }), [rows, jobs]);
 
   const visibleJobs = useMemo(() => jobs.filter(j => {
@@ -233,6 +240,7 @@ export default function HistoryPage() {
     { key: "analysis", labelKey: "seoHistFilterAnalyses", count: counts.analysis },
     { key: "landing", labelKey: "seoHistFilterLanding", count: counts.landing },
     { key: "googlebot", labelKey: "seoHistFilterGooglebot", count: counts.googlebot },
+    { key: "cluster", labelKey: "seoHistFilterCluster", count: counts.cluster },
   ];
 
   return (
@@ -275,6 +283,7 @@ export default function HistoryPage() {
         </div>
 
         <div style={{ borderTop: "1px solid var(--color-border)" }}>
+      {indexErr && <div style={{ color: "var(--color-accent-orange)", fontSize: "12px" }}>{indexErr}</div>}
           {filtered.length === 0 && visibleJobs.length === 0 && (
             <div style={{ padding: "32px 12px", textAlign: "center", fontSize: "13px", color: "var(--color-text-secondary)" }}>
               {q.trim() || filter !== "all" ? t("seoHistNoMatch") : t("seoHistEmpty")}
@@ -335,7 +344,13 @@ export default function HistoryPage() {
 
         {rows.length > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
-            <button onClick={() => { clearHistory(); setRows([]); setScores({}); scoreAskedRef.current.clear(); setPage(0); }} style={{ fontSize: "12px", color: "var(--color-accent-red)", background: "none", border: "none", cursor: "pointer" }}>{t("seoHistClear")}</button>
+            <button
+              title={t("seoHistClearHint")}
+              onClick={() => {
+                if (!window.confirm(t("seoHistClearConfirm"))) return;
+                clearHistory(); setRows([]); setScores({}); scoreAskedRef.current.clear(); setPage(0);
+              }}
+              style={{ fontSize: "12px", color: "var(--color-accent-red)", background: "none", border: "none", cursor: "pointer" }}>{t("seoHistClear")}</button>
           </div>
         )}
       </div>

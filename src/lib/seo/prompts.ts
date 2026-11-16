@@ -690,6 +690,7 @@ export function buildAnalysisPrompt(args: {
 - keyword: ${args.keyword}${loc ? `\n- язык/страна: ${loc}` : ""}
 - ЦЕЛЕВАЯ СТРАНИЦА: ${JSON.stringify(args.targetPage)}
 - КОНКУРЕНТЫ (топ выдачи, со структурой): ${JSON.stringify(args.competitors)}
+- ВАЖНО: у конкурента со scrape_failed:true страница НЕ ПРОЧИТАЛАСЬ (word_count 0 и пустые headings — артефакты чтения, а не тонкий контент). Не делай из таких строк выводов о слабости конкурента и не опирайся на их структуру; выводы строй только по прочитанным конкурентам.
 
 ВЕРНИ JSON строго по схеме (только JSON, без markdown):
 {
