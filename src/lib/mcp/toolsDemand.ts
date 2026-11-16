@@ -92,9 +92,10 @@ async function resolveKwSource(
     String(s[`seoMetricsBaseUrl_${p}`] ?? "").trim() || undefined;
 
   const pinned = String(args.source ?? "").trim().toLowerCase();
-  const chain: KwSource[] = pinned === "ahrefs" || pinned === "semrush" || pinned === "dataforseo"
+  // Ahrefs was removed from the product, so it is out of the fallback chain as well.
+  const chain: KwSource[] = pinned === "semrush" || pinned === "dataforseo"
     ? [pinned as KwSource]
-    : ["ahrefs", "semrush", "dataforseo"];
+    : ["semrush", "dataforseo"];
 
   for (const c of chain) {
     if (c === "dataforseo") {

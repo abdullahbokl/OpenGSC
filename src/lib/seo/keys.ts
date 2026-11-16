@@ -334,22 +334,6 @@ export function getDataForSeoKey(): string {
   return localStorage.getItem("seoKey_dataforseo") || "";
 }
 
-// Ahrefs' free public Domain Rating key (Settings → SEO Metrics). Separate from the paid Site
-// Explorer key above: `/v3/public/domain-rating-free` used to need no key at all, then Ahrefs
-// started requiring one on that endpoint too (still free to generate, no subscription needed).
-// Someone who only wants the DR number back on site cards shouldn't have to configure the whole
-// paid metrics integration just to get it, so this gets its own storage slot.
-export function getAhrefsDrKey(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("ahrefsDrApiKey") || "";
-}
-export function setAhrefsDrKey(key: string) {
-  if (typeof window === "undefined") return;
-  const v = key.trim();
-  if (v) localStorage.setItem("ahrefsDrApiKey", v);
-  else localStorage.removeItem("ahrefsDrApiKey");
-}
-
 // ─── Keyword data source ────────────────────────────────────────────────────────
 //
 // The setting the app was missing. There was a selector for who scrapes the SERP
@@ -358,12 +342,13 @@ export function setAhrefsDrKey(key: string) {
 // simply used DataForSEO if a key happened to exist. Scraping with Serper and holding an Ahrefs
 // key therefore meant no keyword data anywhere, silently.
 
-export type KwSourceSetting = "auto" | "ahrefs" | "semrush" | "dataforseo" | "off";
+export type KwSourceSetting = "auto" | "semrush" | "dataforseo" | "off";
 
 export function getKwSourceSetting(): KwSourceSetting {
   if (typeof window === "undefined") return "auto";
   const v = localStorage.getItem("seoKwSource");
-  return v === "ahrefs" || v === "semrush" || v === "dataforseo" || v === "off" ? v : "auto";
+  // "ahrefs" was a valid value before the provider was removed; legacy copies fall back to auto.
+  return v === "semrush" || v === "dataforseo" || v === "off" ? v : "auto";
 }
 
 export function setKwSourceSetting(v: KwSourceSetting) {
@@ -409,14 +394,15 @@ export function getKeywordSource(): { source: KwResolvedSource; apiKey: string; 
     const suffixed = mode === "reseller" || mode === "custom" ? `seoKey_${p}__${mode}` : `seoKey_${p}`;
     return (localStorage.getItem(suffixed) || localStorage.getItem(`seoKey_${p}`) || "").trim();
   };
-  const metricsHost = (p: "ahrefs" | "semrush") =>
+  const metricsHost = (p: "semrush") =>
     (localStorage.getItem(`seoMetricsBaseUrl_${p}`) || "").trim() || undefined;
 
   const setting = getKwSourceSetting();
   if (setting === "off") return { source: "off", apiKey: "" };
 
+  // Ahrefs was removed from the product; the auto chain skips it.
   const candidates: KwSourceSetting[] = setting === "auto"
-    ? ["ahrefs", "semrush", "dataforseo"]
+    ? ["semrush", "dataforseo"]
     : [setting];
 
   for (const c of candidates) {
@@ -425,7 +411,7 @@ export function getKeywordSource(): { source: KwResolvedSource; apiKey: string; 
       if (k) return { source: "dataforseo", apiKey: k };
       continue;
     }
-    const p = c as "ahrefs" | "semrush";
+    const p = c as "semrush";
     const k = metricsKey(p);
     if (k.length > 4) return { source: p, apiKey: k, baseUrl: metricsHost(p) };
   }

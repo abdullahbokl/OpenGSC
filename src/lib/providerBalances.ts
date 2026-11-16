@@ -4,9 +4,8 @@
 // ProviderBalance table; nothing here runs on a page load.
 //
 // Only providers with a verified balance endpoint are wired: DataForSEO (appendix/user_data),
-// Ahrefs (subscription-info/limits-and-usage — which doubles as a connectivity probe: it
-// answers 200 even when every data endpoint on the host is failing), OpenRouter (/api/v1/key)
-// and 2index.ninja (/api/v1/balance). Providers that publish no such endpoint are invisible
+// OpenRouter (/api/v1/key) and 2index.ninja (/api/v1/balance). (Ahrefs was removed from the
+// product.) Providers that publish no such endpoint are invisible
 // here by design — for those, the provider_down alert over the call log is the coverage.
 import { dbAny } from "@/lib/prisma";
 import { rawQuery } from "@/lib/db/raw";
@@ -27,20 +26,6 @@ export interface BalanceFetch {
 }
 
 const timeout = (ms: number) => AbortSignal.timeout(ms);
-
-async function fetchAhrefs(key: string): Promise<BalanceFetch> {
-  const res = await fetch("https://api.ahrefs.com/v3/subscription-info/limits-and-usage", {
-    headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
-    signal: timeout(15_000),
-  });
-  if (!res.ok) return { provider: "ahrefs", unit: "units", left: null, limit: null, resetAt: null, ok: false, error: `HTTP ${res.status}` };
-  const d = await res.json() as { units_limit_workspace?: unknown; units_usage_workspace?: unknown; usage_reset_date?: string };
-  const limit = Number(d?.units_limit_workspace);
-  const usage = Number(d?.units_usage_workspace);
-  if (!isFinite(limit) || !isFinite(usage)) return { provider: "ahrefs", unit: "units", left: null, limit: null, resetAt: null, ok: false, error: "no units fields" };
-  const reset = d?.usage_reset_date ? new Date(d.usage_reset_date) : null;
-  return { provider: "ahrefs", unit: "units", left: Math.max(0, limit - usage), limit, resetAt: reset && !isNaN(reset.getTime()) ? reset : null, ok: true };
-}
 
 async function fetchDataForSeo(key: string): Promise<BalanceFetch> {
   // The stored key is "login:password" — DataForSEO speaks HTTP Basic with exactly that pair.
@@ -121,10 +106,6 @@ async function fetchCrawlgraph(key: string): Promise<BalanceFetch> {
 // SeoKeysSync mirror writes) or, for 2index, the dedicated User column.
 async function credentialFor(userId: string, provider: string): Promise<string | null> {
   const s = await getOwnerSettings(userId);
-  if (provider === "ahrefs") {
-    const key = String(s.seoKey_ahrefs ?? "").trim();
-    return key || null;
-  }
   if (provider === "dataforseo") {
     const key = String(s.seoKey_dataforseo ?? s.dataforseoKey ?? "").trim();
     return key || null;
@@ -146,7 +127,6 @@ async function credentialFor(userId: string, provider: string): Promise<string |
 }
 
 const FETCHERS: Record<string, (key: string) => Promise<BalanceFetch>> = {
-  ahrefs: fetchAhrefs,
   dataforseo: fetchDataForSeo,
   crawlgraph: fetchCrawlgraph,
   openrouter: fetchOpenRouter,

@@ -38,7 +38,6 @@ const EXACT_KEYS = [
   // sweep after an import, MCP enrich_dr) resolves its key from this mirror — leaving it out
   // meant the browser's working key never reached the server and drops DR 401'd forever while
   // the dashboard (which sends the browser's key in a header) kept working.
-  "ahrefsDrApiKey",
 ];
 // `seoMetrics` covers the whole metrics layer: mode, base URL, monthly cap, active provider.
 //

@@ -38,7 +38,7 @@ export const METRICS_TOOLS: McpTool[] = [
       properties: {
         keywords: { type: "array", items: { type: "string" }, description: "Keywords to look up (max 200)" },
         country: { type: "string", description: "Market the volumes belong to, 2-letter code. Default us" },
-        provider: { type: "string", description: "ahrefs (default) or semrush" },
+        provider: { type: "string", description: "semrush (default) or dataforseo" },
       },
       required: ["keywords"],
     },
@@ -46,7 +46,7 @@ export const METRICS_TOOLS: McpTool[] = [
       const keywords = asStrings(args.keywords).slice(0, 200);
       if (!keywords.length) throw new Error("Missing required argument: keywords");
       const country = String(args.country ?? "us").toLowerCase();
-      const provider = args.provider === "semrush" ? "semrush" : "ahrefs";
+      const provider = args.provider === "semrush" ? "semrush" : "dataforseo";
 
       const cache = await readKeywordCache(keywords, country, provider);
       const found = Object.values(cache).map(k => ({

@@ -19,7 +19,7 @@ import { useHealthStatus } from "@/components/SiteHealthPanel";
 import { loadSyncedAt, rememberSyncedAt, fetchSyncState, watchSync, type SyncState } from "@/lib/syncedAt";
 import { marketFor } from "@/lib/seo/market";
 import { usePersistedState, isGscPeriod, isIsoDate, isSearchType } from "@/lib/usePersistedState";
-import { getAhrefsDrKey } from "@/lib/seo/keys";
+import { getGoAnyKey } from "@/lib/seo/keys";
 import UptimeDot, { uptimeBadgeLabel } from "@/components/uptime/UptimeDot";
 import type { UptimeBadge } from "@/lib/uptime/types";
 
@@ -963,7 +963,7 @@ function PortfolioPageContent() {
       try {
         for (let i = 0; i < domains.length; i += 100) {
           try {
-            const res = await fetch(`/api/dr?domains=${encodeURIComponent(domains.slice(i, i + 100).join(","))}`, { headers: { "x-ahrefs-dr-key": getAhrefsDrKey() } });
+            const res = await fetch(`/api/dr?domains=${encodeURIComponent(domains.slice(i, i + 100).join(","))}`, { headers: { "x-goanyapi-key": getGoAnyKey() } });
             if (!res.ok) continue;
             const d = await res.json();
             const add: Record<string, number> = {};

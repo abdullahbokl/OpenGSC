@@ -1,49 +1,26 @@
-// Server-side Ahrefs Domain Rating via the free public endpoint — the drops button's path.
-//
-// The dashboard's /api/dr takes the key from the browser, because keys there live in
-// localStorage. The drops catalogue cannot afford the same dependency: a button that silently
-// returns nothing when this particular browser never typed the key reads as "DR doesn't work".
-// So the key is resolved from the owner's server settings, in the same order everything
-// server-side resolves keys: the free DR key slot first, then the paid Ahrefs key — an APIv3
-// key is an APIv3 key, and the free endpoint accepts the paid one too.
+// Server-side Domain Rating (Ahrefs' 0–100 scale) via the owner's GoAnyAPI gateway — the drops
+// button's path. Ahrefs itself was removed from the product, so the old free-endpoint fetch is
+// gone; GoAnyAPI (a gateway the user configures under Settings, reselling the same figure) is
+// the only remaining DR source, and its key is resolved from the owner's server settings so the
+// drops catalogue does not depend on this particular browser having typed anything.
 //
 // DrCache is shared with /api/dr (7-day TTL): whichever path fetched first, the other reuses.
-// License: https://ahrefs.com/legal/domain-rating-license — "Domain Rating by Ahrefs"
-// attribution is required wherever the number is shown.
+// GoAnyAPI bills per call (~2 credits/domain), so the batch cap stays small — the cache, not
+// the wallet, absorbs the bulk of a big catalogue.
 
 import { rawQuery } from "@/lib/db/raw";
 import { runUpsert } from "@/lib/db/upsert";
 import { recordDrSnapshots } from "@/lib/seo/drHistory";
 import { getOwnerSettings } from "@/lib/engineKeysServer";
-import { DEFAULT_USER_AGENT } from "@/lib/security/safeFetch";
+import { goanyDr } from "@/lib/seo/goanyapi";
 
 const TTL_MS = 7 * 24 * 3600 * 1000;
-const FREE_CAP = 60;
+const BATCH_CAP = 10;
 
-async function fetchFreeDr(domain: string, apiKey: string): Promise<number | null> {
-  try {
-    const res = await fetch(`https://api.ahrefs.com/v3/public/domain-rating-free?target=${encodeURIComponent(domain)}&output=json`, {
-      headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}`, "User-Agent": DEFAULT_USER_AGENT },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
-    const d = await res.json() as { domain_rating?: { domain_rating?: number } | number; dr?: number };
-    const dr = Number(d?.domain_rating && typeof d.domain_rating === "object" ? d.domain_rating.domain_rating : d?.domain_rating ?? d?.dr);
-    return Number.isFinite(dr) ? dr : null;
-  } catch {
-    return null;
-  }
-}
-
-/** The free DR key, then the paid Ahrefs key (mode slots first, legacy global last). */
+/** The owner's GoAnyAPI key — the only DR source after the Ahrefs removal. */
 export async function resolveDrKey(userId: string): Promise<string> {
   const s = await getOwnerSettings(userId);
-  const free = String(s.ahrefsDrApiKey || "").trim();
-  if (free) return free;
-  const provider = s.seoMetricsProvider === "semrush" ? "semrush" : "ahrefs";
-  const mode = String(s[`seoMetricsMode_${provider}`] ?? "");
-  const slot = mode === "reseller" || mode === "custom" ? `seoKey_${provider}__${mode}` : `seoKey_${provider}`;
-  return String(s[slot] ?? s[`seoKey_${provider}`] ?? "").trim();
+  return String(s.seoKey_goanyapi || "").trim();
 }
 
 export interface DrResult {
@@ -87,12 +64,12 @@ export async function drForDomains(
   const apiKey = await resolveDrKey(userId);
   if (!apiKey) return { ratings, keyFound: false };
 
-  const missing = unique.filter(d => !fresh.has(d)).slice(0, FREE_CAP);
+  const missing = unique.filter(d => !fresh.has(d)).slice(0, BATCH_CAP);
   let i = 0;
-  await Promise.all(Array.from({ length: 4 }, async () => {
+  await Promise.all(Array.from({ length: 2 }, async () => {
     while (i < missing.length) {
       const domain = missing[i++];
-      const dr = await fetchFreeDr(domain, apiKey);
+      const dr = (await goanyDr(apiKey, domain)).data?.dr ?? null;
       if (dr == null) continue;
       ratings[domain] = dr;
       try {
@@ -102,9 +79,9 @@ export async function drForDomains(
           values: { domain, dr, checkedAt: new Date().toISOString() },
           update: { dr: "set", checkedAt: "set" },
         });
-        // Fresh measurement → this month's DrSnapshot row. This is the hook that makes the
-        // drops catalogue accumulate its own DR history instead of renting GoAnyAPI's.
-        await recordDrSnapshots([{ domain, dr, source: "ahrefs-free" }]);
+        // Fresh measurement → this month's DrSnapshot row: the drops catalogue keeps
+        // accumulating its own DR history.
+        await recordDrSnapshots([{ domain, dr, source: "goanyapi" }]);
       } catch { /* cache best-effort, same as /api/dr */ }
     }
   }));

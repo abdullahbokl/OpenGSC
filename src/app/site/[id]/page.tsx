@@ -31,7 +31,7 @@ import { usePrivacy } from "@/lib/PrivacyContext";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { usePersistedState, isGscPeriod, isIsoDate } from "@/lib/usePersistedState";
 import { DEFAULT_AI_PROVIDER } from "@/lib/providerDefaults";
-import { AI_PROVIDER_IDS, getTaskCreds, getAhrefsDrKey } from "@/lib/seo/keys";
+import { AI_PROVIDER_IDS, getTaskCreds, getGoAnyKey } from "@/lib/seo/keys";
 import TrafficChip from "@/components/TrafficChip";
 import { drSeriesText, type DrPoint } from "@/components/DrSparkline";
 import BacklinkProfile from "@/components/BacklinkProfile";
@@ -5448,10 +5448,10 @@ export default function SitePage({
     return `${url}${url.includes('?') ? '&' : '?'}shareToken=${shareToken}`;
   };
 
-  // Ahrefs Domain Rating (free public API, server-cached; attribution required by license).
+  // Domain Rating (Ahrefs DR scale via the owner's GoAnyAPI gateway; server-cached).
   const [drValue, setDrValue] = useState<number | null>(null);
   useEffect(() => {
-    fetch(getUrl(`/api/dr?domains=${encodeURIComponent(domain)}`), { headers: { "x-ahrefs-dr-key": getAhrefsDrKey() } }).then(r => r.ok ? r.json() : null).then(d => {
+    fetch(getUrl(`/api/dr?domains=${encodeURIComponent(domain)}`), { headers: { "x-goanyapi-key": getGoAnyKey() } }).then(r => r.ok ? r.json() : null).then(d => {
       const key = domain.toLowerCase().replace(/^www\./, "");
       const v = d?.ratings?.[key]?.dr;
       if (typeof v === "number") setDrValue(v);
@@ -6009,7 +6009,7 @@ export default function SitePage({
                     {drop < 0 ? "↓" : "↑"}{shown}
                   </span>;
                 })()}
-                <a href="https://ahrefs.com/" target="_blank" rel="noreferrer" style={{ fontSize: "10px", color: "var(--color-text-tertiary)", textDecoration: "none" }} title={t("drByAhrefs")}>{t("byAhrefs")}</a>
+                <a href="https://goanyapi.com/" target="_blank" rel="noreferrer" style={{ fontSize: "10px", color: "var(--color-text-tertiary)", textDecoration: "none" }} title={t("drSource")}>{t("drVia")}</a>
               </span>
             )}
           </div>

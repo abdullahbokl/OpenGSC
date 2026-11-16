@@ -49,7 +49,7 @@ export const SEO_PROVIDERS: KeyCardProvider[] = [
 ];
 
 /**
- * Ahrefs, Semrush, Majestic and Keys.so are deliberately NOT in SEO_PROVIDERS above (DataForSEO is
+ * Ahrefs (removed from the product), Semrush, Majestic and Keys.so are deliberately NOT in SEO_PROVIDERS above (DataForSEO is
  * in both lists on purpose: one credential that SERP, keyword demand and backlinks all read).
  *
  * They are configured on their own settings screen together with the access mode, host and
@@ -58,7 +58,6 @@ export const SEO_PROVIDERS: KeyCardProvider[] = [
  * was made to remove. The card definitions live here only so both screens share one component.
  */
 export const METRICS_PROVIDER_CARDS: KeyCardProvider[] = [
-  { id: "ahrefs", storageKey: "seoKey_ahrefs", name: "Ahrefs", roleKey: "seoRoleAhrefs", placeholder: "Ahrefs API v3 key", hintKey: "seoSetHintAhrefs", instrKey: "seoSetInstrAhrefs", docsUrl: "https://docs.ahrefs.com/", color: "#f76d01", logo: "A" },
   { id: "semrush", storageKey: "seoKey_semrush", name: "Semrush", roleKey: "seoRoleSemrush", placeholder: "Semrush API key", hintKey: "seoSetHintSemrush", instrKey: "seoSetInstrSemrush", docsUrl: "https://developer.semrush.com/api/", color: "#ff642d", logo: "S" },
   { id: "majestic", storageKey: "seoKey_majestic", name: "Majestic", roleKey: "seoRoleMajestic", placeholder: "Majestic API key", hintKey: "seoSetHintMajestic", instrKey: "seoSetInstrMajestic", docsUrl: "https://developer-support.majestic.com/api/", color: "#00A4E4", logo: "M" },
   { id: "keysso", storageKey: "seoKey_keysso", name: "Keys.so", roleKey: "seoRoleKeysso", placeholder: "Keys.so API token / gbs_sk_live_…", hintKey: "seoSetHintKeysso", instrKey: "seoSetInstrKeysso", docsUrl: "https://apidoc.keys.so/", color: "#7C3AED", logo: "K" },

@@ -1,5 +1,5 @@
 // SERP Monitor — host enrichment: registration age (RDAP/WHOIS through the drops registry
-// stack), DR (the free Ahrefs endpoint) and referring-domain counts (the paid metrics stats
+// stack), DR (the owner's GoAnyAPI gateway) and referring-domain counts (the paid metrics stats
 // call behind the owner's SEO-metrics key). All are bounded: at most `limit` hosts per call,
 // and the age phase stops at `deadline` (epoch ms) — the enrich routes run ONE step per HTTP
 // request and report `remaining` so the client can loop without holding the request open.
@@ -492,7 +492,7 @@ export async function pendingHostIds(projectId: string, what: "age" | "dr" | "re
   }
 }
 
-/** Whether a DR key (free endpoint or Ahrefs) is configured for the workspace owner. */
+/** Whether a GoAnyAPI key (the only DR source after the Ahrefs removal) is configured for the workspace owner. */
 export async function serpmonDrKeyFound(userId: string): Promise<boolean> {
   try {
     return Boolean(await resolveDrKey(userId));

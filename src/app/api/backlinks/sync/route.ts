@@ -7,19 +7,16 @@ import { recordUsage, releaseUnusedUnits, withinCap } from "@/lib/seo/metricsSto
 import { normDomain } from "@/lib/seo/backlinkStore";
 import { resolveDataforseoCreds, startDataforseoExport } from "@/lib/seo/dataforseoBacklinks";
 import {
-  EXPORT_PAGE_SIZE, PROBE_UNITS, STATS_UNITS,
-  cachedPaginationMode, estimateExportUnits, fetchBacklinksStats,
-} from "@/lib/seo/backlinksApi";
-import {
-  createApiSync, listApiSyncs, runBacklinkExport, runKeyssoBacklinkExport, runningApiSync,
+  createApiSync, listApiSyncs, runKeyssoBacklinkExport, runningApiSync,
 } from "@/lib/seo/siteBacklinkStore";
 
-// Full backlink export from Ahrefs — the api writer of the backlinks v2 wave.
+// Backlink export by provider (Keys.so / DataForSEO) — the api writer of the backlinks v2 wave.
+// (The original Ahrefs writer was removed from the product; its error is ahrefs_removed.)
 // POST /api/backlinks/sync { siteId, provider?, confirm?, apiKey?, baseUrl?, cap? }
 //   provider "keysso" → the same export from Keys.so's Runet index (1 credit per 100 links);
 //   provider "dataforseo" → the same export from DataForSEO, live and lost links
 //                           ($0.024 per 1 000-link page + $0.000036 per link);
-//   anything else → Ahrefs, as before.
+//   (the Ahrefs path was removed from the product — the default provider error is ahrefs_removed)
 //   without confirm → { confirmRequired: true, estimate } — the price, nothing spent beyond the
 //                     one stats call that priced it
 //   with confirm    → creates a SiteBacklinkSync row, runs the export fire-and-forget
@@ -56,58 +53,9 @@ export async function POST(req: Request) {
     return NextResponse.json(r.body, { status: r.status });
   }
 
-  const resolved = await resolveAhrefsCreds(userId, b);
-  if (resolved === "semrush") return NextResponse.json({ error: "provider_unsupported" }, { status: 400 });
-  if (!resolved) return NextResponse.json({ error: "no_key" }, { status: 400 });
-  const creds = resolved;
-
-  // One paid call (50 units) to know the profile size the price is quoted from. It is recorded
-  // even on the estimate-only path — the gateway bills it either way, and a balance that omits
-  // it would lie to the next screen.
-  if (!(await withinCap(userId, "ahrefs", STATS_UNITS, cap))) {
-    return NextResponse.json({ error: "cap_exceeded", wouldSpend: STATS_UNITS }, { status: 429 });
-  }
-  await recordUsage(userId, "ahrefs", STATS_UNITS);
-  const stats = await fetchBacklinksStats(creds, target);
-  if (stats.error || stats.live == null) {
-    return NextResponse.json({ error: stats.error ?? "stats_failed" }, { status: 502 });
-  }
-  const live = stats.live;
-
-  const mode = cachedPaginationMode(creds);
-  const units = (mode ? 0 : PROBE_UNITS) + estimateExportUnits(live);
-  const estimate = {
-    rows: live,
-    pages: Math.max(1, Math.ceil(live / EXPORT_PAGE_SIZE)),
-    units,
-    usd: estimateCostUsd(units, "ahrefs"),
-    paginationMode: mode,
-  };
-
-  if (!confirm) {
-    return NextResponse.json({ confirmRequired: true, estimate });
-  }
-
-  // One live run per site. A second attempt while the first is alive is a 409; a run whose
-  // heartbeat died with the process is marked failed where runningApiSync looks, not silently
-  // restarted — a restart would re-spend units on a price the user never confirmed twice.
-  const running = await runningApiSync(siteId);
-  if (running) return NextResponse.json({ error: "already_running", id: running.id }, { status: 409 });
-
-  if (!(await withinCap(userId, "ahrefs", units, cap))) {
-    return NextResponse.json({ error: "cap_exceeded", wouldSpend: units }, { status: 429 });
-  }
-  // Reserve the ceiling up front, reconcile in the runner's finally: failed pages bill nothing,
-  // and the runner refunds the difference once the true count is known.
-  await recordUsage(userId, "ahrefs", units);
-
-  const sync = await createApiSync(siteId, mode ?? "");
-  runBacklinkExport({
-    syncId: sync.id, siteId, userId, target, creds,
-    live, reservedUnits: units, mode,
-  }).catch(err => console.error(`[backlinks-sync] ${sync.id} failed:`, err));
-
-  return NextResponse.json({ id: sync.id, estimate });
+  // Ahrefs was removed from the product: the export it powered has no fetch path left. Keys.so
+  // and DataForSEO above are the supported providers.
+  return NextResponse.json({ error: "ahrefs_removed" }, { status: 400 });
 }
 
 export async function GET(req: Request) {
@@ -128,37 +76,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ runs: await listApiSyncs(siteId, 10) });
 }
 
-/**
- * Credentials for the export: explicit body key first (the browser sends its localStorage pair,
- * like every /api/metrics route), otherwise the User.seoSettings mirror — the same key names and
- * mode fallback chain the warmup scheduler uses, because this is background work and must resolve
- * server-side after the request that started it is gone.
- *
- * Returns null when no Ahrefs key exists anywhere, "semrush" when the mirrored provider is
- * Semrush with no separate Ahrefs key — the export is Ahrefs-only, same stance as
- * fetchBacklinkProfile, and deserves its own error rather than a bare "no key".
- */
-async function resolveAhrefsCreds(
-  userId: string, body: { apiKey?: unknown; baseUrl?: unknown },
-): Promise<MetricsCreds | "semrush" | null> {
-  const apiKey = String(body.apiKey ?? "").trim();
-  if (apiKey) {
-    return { provider: "ahrefs", apiKey, baseUrl: String(body.baseUrl ?? "").trim() || undefined };
-  }
-  try {
-    const rows = await rawQuery<{ seoSettings: string | null }[]>(`SELECT seoSettings FROM "User" WHERE id = ?`, userId);
-    const s = JSON.parse(rows?.[0]?.seoSettings ?? "{}") as Record<string, unknown>;
-    const mode = String(s.seoMetricsMode_ahrefs ?? "");
-    const slot = mode === "reseller" || mode === "custom"
-      ? "seoKey_ahrefs__" + mode
-      : "seoKey_ahrefs";
-    const key = String(s[slot] ?? s.seoKey_ahrefs ?? "").trim();
-    if (key) {
-      return { provider: "ahrefs", apiKey: key, baseUrl: String(s.seoMetricsBaseUrl_ahrefs ?? "").trim() || undefined };
-    }
-    return s.seoMetricsProvider === "semrush" ? "semrush" : null;
-  } catch { return null; }
-}
+
 
 /**
  * The Keys.so export: priced from a one-credit `per_page=1` read whose envelope `total` is the

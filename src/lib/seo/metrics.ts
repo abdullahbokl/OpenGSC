@@ -21,7 +21,7 @@
 
 import { loggedFetch } from "@/lib/providerLog/log";
 
-import { AHREFS_UNIT_FLOOR, DEFAULT_BASE_URL, DOMAIN_UNITS, IDEA_FIELDS_BASE, KEYWORD_FIELDS_BASE, KEYWORD_FIELDS_KD, MAJESTIC_REFDOMAIN_ANALYSIS_UNITS, MAJESTIC_REFDOMAIN_PAGE_SIZE, MAJESTIC_STATS_UNITS, SEMRUSH_BACKLINKS_OVERVIEW_UNITS, SEMRUSH_BACKLINKS_UNITS_PER_ROW, SEMRUSH_COMPETITOR_UNITS_PER_ROW, SEMRUSH_IDEA_UNITS_PER_ROW, SEMRUSH_ORGANIC_KEYWORD_UNITS_PER_ROW, COMPETITOR_FIELDS, ORGANIC_KEYWORD_FIELDS, REFDOMAIN_FIELDS, estimateCompetitorUnits, estimateIdeaUnits, estimateOrganicKeywordUnits, estimateUnits, gatewayStatusFromError, isKeywordCapable, parseKeyssoBase, KEYSSO_REFDOMAIN_PAGE_SIZE, KEYSSO_STATS_UNITS, DATAFORSEO_PAGE_SIZE, DATAFORSEO_STATS_UNITS, DATAFORSEO_HISTORY_MONTHS, DATAFORSEO_NEWLOST_WEEKS, CRAWLGRAPH_LIMIT, CRAWLGRAPH_STATS_UNITS, type IdeaMode, type MetricsCreds, type MetricsProvider, type SubscriptionInfo } from "./metricsPricing";
+import { AHREFS_UNIT_FLOOR, DEFAULT_BASE_URL, MAJESTIC_REFDOMAIN_ANALYSIS_UNITS, MAJESTIC_REFDOMAIN_PAGE_SIZE, MAJESTIC_STATS_UNITS, SEMRUSH_BACKLINKS_OVERVIEW_UNITS, SEMRUSH_BACKLINKS_UNITS_PER_ROW, SEMRUSH_COMPETITOR_UNITS_PER_ROW, SEMRUSH_IDEA_UNITS_PER_ROW, SEMRUSH_ORGANIC_KEYWORD_UNITS_PER_ROW, REFDOMAIN_FIELDS, isKeywordCapable, parseKeyssoBase, KEYSSO_REFDOMAIN_PAGE_SIZE, KEYSSO_STATS_UNITS, DATAFORSEO_PAGE_SIZE, DATAFORSEO_STATS_UNITS, DATAFORSEO_HISTORY_MONTHS, DATAFORSEO_NEWLOST_WEEKS, CRAWLGRAPH_LIMIT, CRAWLGRAPH_STATS_UNITS, type IdeaMode, type MetricsCreds, type MetricsProvider, type SubscriptionInfo } from "./metricsPricing";
 import {
   keyssoErrorText, keyssoNextStep, keyssoRemainingCredits, mapKeyssoAiAnswer, mapKeyssoAiCompetitor,
   mapKeyssoDashboard, mapKeyssoRefDomain, parseKeyssoEnvelope, keyssoBacklinkToExportRow,
@@ -262,55 +262,15 @@ const normCountry = (c: string): string => (c || "").trim().toLowerCase();
  * because a wrong volume attached to a real keyword is worse than a missing one.
  */
 async function ahrefsKeywords(
-  creds: MetricsCreds,
-  keywords: string[],
-  opts: { country: string; withDifficulty?: boolean },
+  _creds: MetricsCreds,
+  _keywords: string[],
+  _opts: { country: string; withDifficulty?: boolean },
 ): Promise<MetricsResult<KeywordMetric>> {
-  const usable = keywords.filter(k => k && !k.includes(","));
-  if (!usable.length) return { items: [], units: 0 };
 
-  const select = opts.withDifficulty
-    ? [...KEYWORD_FIELDS_BASE, ...KEYWORD_FIELDS_KD]
-    : [...KEYWORD_FIELDS_BASE];
-
-  const base = (creds.baseUrl || DEFAULT_BASE_URL.ahrefs).replace(/\/+$/, "");
-  const params = new URLSearchParams({
-    select: select.join(","),
-    country: normCountry(opts.country),
-    keywords: usable.join(","),
-  });
-
-  const res = await requestWithRetry(
-    `${base}/v3/keywords-explorer/overview?${params}`,
-    { headers: { Authorization: `Bearer ${creds.apiKey}`, Accept: "application/json" } },
-    creds.apiKey, creds.provider,
-  );
-  if (!res.ok) {
-    return { items: [], units: 0, error: `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)}` };
-  }
-
-  // Every Ahrefs list endpoint answers with one top-level object keyed by report name.
-  const data = await res.json();
-  const rows: JsonRecord[] = Array.isArray(data?.keywords) ? data.keywords : [];
-
-  // Billed on the rows that came back, not the keywords asked for — the same reconciliation
-  // `ahrefsIdeas` does. A keyword the provider has never seen simply does not arrive, and
-  // reporting the reservation here would make the caller's refund compute ceiling − ceiling = 0.
-  const billed = estimateUnits("keywords-explorer/overview", select, rows.length);
-
-  return {
-    units: billed,
-    items: rows.map(r => ({
-      keyword: String(r.keyword ?? ""),
-      volume: num(r.volume),
-      difficulty: num(r.difficulty),
-      cpc: r.cpc == null ? null : num(r.cpc),
-      globalVolume: num(r.global_volume),
-      parentTopic: r.parent_topic ? String(r.parent_topic) : null,
-      intents: r.intents ? JSON.stringify(r.intents) : null,
-      payload: r,
-    })).filter(k => k.keyword),
-  };
+  // Ahrefs was removed from the product (the operator holds no Ahrefs subscription and the
+  // integration is retired): every dispatch that used to reach the API now fails fast with no
+  // network traffic, whatever the client sends.
+  return { items: [], units: 0, error: "ahrefs_removed" };
 }
 
 /**
@@ -325,49 +285,12 @@ async function ahrefsKeywords(
  * domain-rating endpoint, which needs no key and works for every user; buying it again here
  * would charge people for a number they already have.
  */
-async function ahrefsDomain(creds: MetricsCreds, domain: string): Promise<MetricsResult<DomainMetric>> {
-  const base = (creds.baseUrl || DEFAULT_BASE_URL.ahrefs).replace(/\/+$/, "");
-  const auth = { headers: { Authorization: `Bearer ${creds.apiKey}`, Accept: "application/json" } };
-  const date = new Date().toISOString().slice(0, 10);
+async function ahrefsDomain(_creds: MetricsCreds, _domain: string): Promise<MetricsResult<DomainMetric>> {
 
-  // Neither endpoint accepts `select` — both always return their full field set (8 and 4
-  // fields). Sending one anyway is at best ignored and at worst a 400, and it would also make
-  // the cost estimate a fiction: with no field choice, the price is fixed and both land on the
-  // 50-unit floor regardless of what is read out of the response.
-  const [mRes, lRes] = await Promise.all([
-    requestWithRetry(
-      `${base}/v3/site-explorer/metrics?${new URLSearchParams({ target: domain, mode: "domain", date })}`,
-      auth, creds.apiKey, creds.provider,
-    ),
-    requestWithRetry(
-      `${base}/v3/site-explorer/backlinks-stats?${new URLSearchParams({ target: domain, mode: "domain", date })}`,
-      auth, creds.apiKey, creds.provider,
-    ),
-  ]);
-
-  // A failure on either half is not fatal: half a card is better than an error, and the caller
-  // has no way to ask for just the part that worked.
-  const m = mRes.ok ? ((await mRes.json())?.metrics ?? {}) : {};
-  const l = lRes.ok ? (await lRes.json()) : {};
-  const stats = l?.metrics ?? l;
-
-  if (!mRes.ok && !lRes.ok) {
-    return { items: [], units: 0, error: `ahrefs ${mRes.status}/${lRes.status}` };
-  }
-
-  return {
-    units: DOMAIN_UNITS,
-    items: [{
-      domain,
-      dr: null,
-      refDomains: num(stats?.live_refdomains),
-      backlinks: num(stats?.live),
-      orgTraffic: num(m?.org_traffic),
-      orgKeywords: num(m?.org_keywords),
-      orgCost: num(m?.org_cost),
-      payload: { ...m, ...stats },
-    }],
-  };
+  // Ahrefs was removed from the product (the operator holds no Ahrefs subscription and the
+  // integration is retired): every dispatch that used to reach the API now fails fast with no
+  // network traffic, whatever the client sends.
+  return { items: [], units: 0, error: "ahrefs_removed" };
 }
 
 // ─── Backlink profile ──────────────────────────────────────────────────────────
@@ -492,179 +415,16 @@ export async function fetchBacklinkStats(
   };
 }
 
-/** Offset support is a gateway property, not a profile property — probed once per host per day. */
-const refdomainsModeCache = new Map<string, { mode: "offset" | "keyset"; at: number }>();
-const REFDOMAINS_MODE_CACHE_MS = 24 * 3600 * 1000;
-
 async function ahrefsProfile(
-  creds: MetricsCreds,
-  domain: string,
-  opts: { minDr?: number; stats?: JsonRecord } = {},
+  _creds: MetricsCreds,
+  _domain: string,
+  _opts: { minDr?: number; stats?: JsonRecord } = {},
 ): Promise<MetricsResult<BacklinkProfile> & { sawEnd?: boolean; unitsSpent?: number }> {
-  const base = (creds.baseUrl || DEFAULT_BASE_URL.ahrefs).replace(/\/+$/, "");
-  const auth = { headers: { Authorization: `Bearer ${creds.apiKey}`, Accept: "application/json" } };
 
-  let stats = opts.stats ?? null;
-  if (!stats) {
-    const s = await fetchBacklinkStats(creds, domain);
-    if (!s.ok) return { items: [], units: 0, error: s.error, unitsSpent: 0 };
-    stats = s.raw;
-  }
-  // One floored stats call was spent on this pull, whoever fetched it.
-  let unitsSpent = AHREFS_UNIT_FLOOR;
-
-  const pageCost = (rows: number) =>
-    estimateUnits("site-explorer/refdomains", REFDOMAIN_FIELDS, rows);
-
-  const refDomains: RefDomainItem[] = [];
-  const seen = new Set<string>();
-  const addPage = (rawRows: JsonRecord[]): number => {
-    let added = 0;
-    for (const r of rawRows) {
-      const refDomain = String(r.domain ?? "").toLowerCase().replace(/^www\./, "");
-      if (!refDomain.includes(".") || seen.has(refDomain)) continue;
-      seen.add(refDomain);
-      refDomains.push({
-        refDomain,
-        dr: num(r.domain_rating),
-        linksToTarget: num(r.links_to_target),
-        dofollow: Number(r.dofollow_links ?? 0) > 0,
-        firstSeen: String(r.first_seen ?? ""),
-      });
-      added++;
-    }
-    return added;
-  };
-
-  const fetchPage = async (params: URLSearchParams) => {
-    const res = await requestWithRetry(`${base}/v3/site-explorer/refdomains?${params}`, auth, creds.apiKey, creds.provider);
-    if (!res.ok) return { ok: false as const, error: `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)}` };
-    return { ok: true as const, rows: ((await res.json())?.refdomains ?? []) as JsonRecord[] };
-  };
-
-  // Paging only matters when the profile is bigger than one page. When it is, probe the gateway
-  // first (two ten-row calls, one floor each) so a keyset gateway never pays for a DR-ordered
-  // page it then has to re-fetch in cursor order. Same verdict rule as the all-backlinks probe
-  // in backlinksApi.ts: an honored offset can never revisit a row, so any overlap between the
-  // two windows means offset was ignored. Restated here rather than imported — backlinksApi
-  // imports this module, and the cycle would bite both.
-  const total = num(stats?.live_refdomains);
-  let mode: "offset" | "keyset" | null = null;
-  const cached = refdomainsModeCache.get(base);
-  if (cached && Date.now() - cached.at < REFDOMAINS_MODE_CACHE_MS) mode = cached.mode;
-
-  if ((total == null || total > REFDOMAIN_PAGE_SIZE) && !mode) {
-    const probeParams = (offset: number) => new URLSearchParams({
-      target: domain, mode: "domain", limit: "10", offset: String(offset),
-      select: "domain", order_by: "domain:asc",
-    });
-    const keyOf = (rows: JsonRecord[]) => rows.map(r => String(r.domain ?? "").toLowerCase()).filter(Boolean);
-    const a = await fetchPage(probeParams(0));
-    // Only a definitive answer is cached for the day: a 400 means the gateway does not know
-    // `offset`, a clean comparison means it does. A transient 5xx or a 429 says nothing about
-    // offset support, and caching it would lock the wrong mode in for 24 hours.
-    if (!a.ok) {
-      mode = "keyset";
-      if (gatewayStatusFromError(a.error) === 400) refdomainsModeCache.set(base, { mode, at: Date.now() });
-    } else {
-      unitsSpent += AHREFS_UNIT_FLOOR;
-      const b = await fetchPage(probeParams(10));
-      if (!b.ok) {
-        mode = "keyset";
-        if (gatewayStatusFromError(b.error) === 400) refdomainsModeCache.set(base, { mode, at: Date.now() });
-      } else {
-        unitsSpent += AHREFS_UNIT_FLOOR;
-        const k1 = keyOf(a.rows), k2 = keyOf(b.rows);
-        mode = k2.length && k1.some(d => k2.includes(d)) ? "keyset" : "offset";
-        refdomainsModeCache.set(base, { mode, at: Date.now() });
-      }
-    }
-  }
-
-  // Page until the profile ends. `sawEnd` is what makes the pull complete: only a run that saw
-  // the last row may conclude that an absent domain is gone.
-  let sawEnd = false;
-  let partialError = "";
-  let offset = 0;
-  // In keyset mode even the first page goes out in cursor order: `domain > ""` matches every
-  // domain, and starting from a DR-ordered page would key the cursor off a row that is not the
-  // alphabetically last one, silently dropping everything after it.
-  let afterDomain: string | undefined = mode === "keyset" ? "" : undefined;
-  // A profile that fits one page is never probed, so its offset mode is an assumption, not a
-  // finding. Remembered so a gateway that turns out to ignore offset can be switched once.
-  const modeWasAssumed = mode === null;
-  let switchedToKeyset = false;
-  for (;;) {
-    const p = await fetchPage(refdomainsPageParams({
-      target: domain, limit: REFDOMAIN_PAGE_SIZE, minDr: opts.minDr, offset: offset || undefined, afterDomain,
-    }));
-    if (!p.ok) {
-      if (refDomains.length === 0) return { items: [], units: unitsSpent, error: p.error, unitsSpent };
-      partialError = p.error; // keep the pages already paid for, marked incomplete
-      break;
-    }
-    unitsSpent += pageCost(p.rows.length);
-    if (!p.rows.length) { sawEnd = true; break; }
-    const added = addPage(p.rows);
-    if (mode === "keyset") {
-      const last = String(p.rows[p.rows.length - 1].domain ?? "").toLowerCase();
-      if (last === afterDomain) break; // cursor not advancing — stop rather than re-bill the page
-      afterDomain = last;
-      if (added === 0 && p.rows.length >= REFDOMAIN_PAGE_SIZE) break; // safety: full page, nothing new
-    } else {
-      // A page shorter than the limit is NOT the end of the profile. A gateway can answer with
-      // fewer rows than asked for — a cap, or partial upstream data (one user's refresh ended
-      // with 12 rows on a 648-domain profile) — and calling that the end produced
-      // `complete: true` on a stub, which then marked every domain it had not seen as lost.
-      // The end is an empty page.
-      if (added === 0) {
-        // The same rows again at a new offset: the gateway ignores `offset`. When that was only
-        // assumed, page by cursor instead (already-seen domains are deduplicated), and remember
-        // it so the next refresh does not pay to find out again.
-        if (modeWasAssumed && !switchedToKeyset) {
-          switchedToKeyset = true;
-          mode = "keyset";
-          afterDomain = "";
-          refdomainsModeCache.set(base, { mode, at: Date.now() });
-          continue;
-        }
-        break; // offset drifting in place — stop rather than re-bill the same page
-      }
-      // The one case where the end is provable without paying for an empty page: a short page
-      // that brings the pull up to the provider's own count. Short of that, ask again.
-      if (p.rows.length < REFDOMAIN_PAGE_SIZE && total != null && refDomains.length >= total) {
-        sawEnd = true;
-        break;
-      }
-      offset += p.rows.length;
-    }
-  }
-
-  // An end that left far fewer domains than the provider says exist is a sample, not a profile.
-  // It is kept (the rows are real) but never called complete: `complete` licenses marking every
-  // absent domain as lost.
-  const shortfall = sawEnd ? refdomainShortfall(refDomains.length, total, opts.minDr) : null;
-  if (shortfall) sawEnd = false;
-
-  const live = num(stats?.live);
-  const dofollowCount = refDomains.filter(r => r.dofollow).length;
-
-  const result: MetricsResult<BacklinkProfile> & { sawEnd?: boolean; unitsSpent?: number; shortfall?: RefdomainShortfall } = {
-    units: unitsSpent,
-    unitsSpent,
-    sawEnd,
-    items: [{
-      refDomainsTotal: total,
-      backlinksTotal: live,
-      // Computed from the rows we actually pulled, not from the whole profile — labelled as
-      // such in the UI, because paying 5 units a row for the true figure is not worth it.
-      dofollowPct: refDomains.length ? Math.round((dofollowCount / refDomains.length) * 100) : null,
-      refDomains,
-    }],
-  };
-  if (shortfall) result.shortfall = shortfall;
-  if (partialError) result.error = partialError;
-  return result;
+  // Ahrefs was removed from the product (the operator holds no Ahrefs subscription and the
+  // integration is retired): every dispatch that used to reach the API now fails fast with no
+  // network traffic, whatever the client sends.
+  return { items: [], units: 0, error: "ahrefs_removed" };
 }
 
 export async function fetchBacklinkProfile(
@@ -2151,38 +1911,13 @@ export async function fetchOrganicCompetitors(
 }
 
 async function ahrefsCompetitors(
-  creds: MetricsCreds, domain: string, opts: { limit?: number; country: string },
+  _creds: MetricsCreds, _domain: string, _opts: { limit?: number; country: string },
 ): Promise<MetricsResult<CompetitorItem>> {
-  const limit = Math.max(5, Math.min(100, opts.limit ?? 20));
-  const base = (creds.baseUrl || DEFAULT_BASE_URL.ahrefs).replace(/\/+$/, "");
-  const params = new URLSearchParams({
-    target: domain, mode: "domain",
-    country: normCountry(opts.country),
-    date: new Date().toISOString().slice(0, 10),
-    select: COMPETITOR_FIELDS.join(","),
-    limit: String(limit),
-    order_by: "keywords_common:desc",
-  });
 
-  try {
-    const res = await requestWithRetry(
-      `${base}/v3/site-explorer/organic-competitors?${params}`,
-      { headers: { Authorization: `Bearer ${creds.apiKey}`, Accept: "application/json" } },
-      creds.apiKey, creds.provider,
-    );
-    if (!res.ok) return { items: [], units: 0, error: `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)}` };
-    const rows: JsonRecord[] = (await res.json())?.competitors ?? [];
-    return {
-      units: estimateCompetitorUnits(limit),
-      items: rows.map(r => ({
-        domain: String(r.competitor_domain ?? "").toLowerCase().replace(/^www\./, ""),
-        sharedKeywords: num(r.keywords_common),
-        traffic: null,
-      })).filter(c => c.domain.includes(".")),
-    };
-  } catch (e) {
-    return { items: [], units: 0, error: String((e as Error)?.message ?? e) };
-  }
+  // Ahrefs was removed from the product (the operator holds no Ahrefs subscription and the
+  // integration is retired): every dispatch that used to reach the API now fails fast with no
+  // network traffic, whatever the client sends.
+  return { items: [], units: 0, error: "ahrefs_removed" };
 }
 
 /**
@@ -2244,48 +1979,13 @@ export async function fetchOrganicKeywords(
 }
 
 async function ahrefsOrganicKeywords(
-  creds: MetricsCreds, domain: string, opts: { limit?: number; country: string; withDifficulty?: boolean; maxPosition?: number },
+  _creds: MetricsCreds, _domain: string, _opts: { limit?: number; country: string; withDifficulty?: boolean; maxPosition?: number },
 ): Promise<MetricsResult<OrganicKeywordItem>> {
-  const limit = Math.max(10, Math.min(1000, opts.limit ?? 200));
-  const select = opts.withDifficulty
-    ? [...ORGANIC_KEYWORD_FIELDS, "keyword_difficulty"]
-    : [...ORGANIC_KEYWORD_FIELDS];
 
-  const base = (creds.baseUrl || DEFAULT_BASE_URL.ahrefs).replace(/\/+$/, "");
-  const params = new URLSearchParams({
-    target: domain, mode: "domain",
-    country: normCountry(opts.country),
-    date: new Date().toISOString().slice(0, 10),
-    select: select.join(","),
-    limit: String(limit),
-    order_by: "volume:desc",
-  });
-  // `best_position` is already selected, so filtering on it adds nothing to the bill.
-  if (opts.maxPosition) {
-    params.set("where", JSON.stringify({ and: [{ field: "best_position", is: ["lte", opts.maxPosition] }] }));
-  }
-
-  try {
-    const res = await requestWithRetry(
-      `${base}/v3/site-explorer/organic-keywords?${params}`,
-      { headers: { Authorization: `Bearer ${creds.apiKey}`, Accept: "application/json" } },
-      creds.apiKey, creds.provider,
-    );
-    if (!res.ok) return { items: [], units: 0, error: `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)}` };
-    const rows: JsonRecord[] = (await res.json())?.keywords ?? [];
-    return {
-      units: estimateOrganicKeywordUnits(limit, !!opts.withDifficulty),
-      items: rows.map(r => ({
-        keyword: String(r.keyword ?? "").trim().toLowerCase(),
-        position: num(r.best_position),
-        volume: num(r.volume),
-        difficulty: num(r.keyword_difficulty),
-        url: String(r.best_position_url ?? ""),
-      })).filter(k => k.keyword),
-    };
-  } catch (e) {
-    return { items: [], units: 0, error: String((e as Error)?.message ?? e) };
-  }
+  // Ahrefs was removed from the product (the operator holds no Ahrefs subscription and the
+  // integration is retired): every dispatch that used to reach the API now fails fast with no
+  // network traffic, whatever the client sends.
+  return { items: [], units: 0, error: "ahrefs_removed" };
 }
 
 /**
@@ -2367,68 +2067,13 @@ const IDEA_LIMIT_MAX = 200;
 const clampIdeaLimit = (n: number | undefined) => Math.max(10, Math.min(IDEA_LIMIT_MAX, n ?? 100));
 
 async function ahrefsIdeas(
-  creds: MetricsCreds, seed: string, opts: IdeaOptions,
+  _creds: MetricsCreds, _seed: string, _opts: IdeaOptions,
 ): Promise<MetricsResult<KeywordMetric>> {
-  const mode: IdeaMode = opts.mode === "related" ? "related" : "matching";
-  const limit = clampIdeaLimit(opts.limit);
-  const select = opts.withDifficulty ? [...IDEA_FIELDS_BASE, ...KEYWORD_FIELDS_KD] : [...IDEA_FIELDS_BASE];
 
-  const base = (creds.baseUrl || DEFAULT_BASE_URL.ahrefs).replace(/\/+$/, "");
-  const params = new URLSearchParams({
-    select: select.join(","),
-    country: normCountry(opts.country),
-    keywords: seed,
-    limit: String(limit),
-    // `volume` is already selected, so ordering by it adds nothing to the bill — and without it
-    // the API returns an arbitrary slice of the tail, which for a capped limit is the difference
-    // between the 100 best ideas and 100 random ones.
-    order_by: "volume:desc",
-  });
-
-  if (mode === "related") {
-    params.set("terms", "all");
-    params.set("view_for", opts.viewFor === "top_100" ? "top_100" : "top_10");
-  } else {
-    params.set("terms", opts.questionsOnly ? "questions" : "all");
-    params.set("match_mode", "terms");
-  }
-
-  const res = await requestWithRetry(
-    `${base}/v3/${mode === "related" ? "keywords-explorer/related-terms" : "keywords-explorer/matching-terms"}?${params}`,
-    { headers: { Authorization: `Bearer ${creds.apiKey}`, Accept: "application/json" } },
-    creds.apiKey, creds.provider,
-  );
-  if (!res.ok) {
-    return { items: [], units: 0, error: `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)}` };
-  }
-
-  const rows: JsonRecord[] = (await res.json())?.keywords ?? [];
-  // Billed on what came back, not on `limit`.
-  //
-  // `units` above is the ceiling the caller reserved against the cap — correct for that job, and
-  // wrong to report as the outcome. Ahrefs charges for the rows it returns, and a thin seed
-  // returns a handful of the two hundred asked for. Reporting the ceiling here made the refund in
-  // `releaseUnusedUnits` compute `ceiling - ceiling = 0` and hand nothing back, which quietly
-  // undid the whole reconciliation.
-  const billed = rows.length
-    ? estimateIdeaUnits(mode, rows.length, !!opts.withDifficulty)
-    : AHREFS_UNIT_FLOOR;
-
-  return {
-    units: billed,
-    items: rows.map(r => ({
-      keyword: String(r.keyword ?? "").trim().toLowerCase(),
-      volume: num(r.volume),
-      difficulty: num(r.difficulty),
-      // Ahrefs returns CPC in USD cents here, unlike the overview endpoint. Normalized so a
-      // caller mixing both sources does not silently show one of them a hundred times too big.
-      cpc: r.cpc == null ? null : (num(r.cpc) ?? 0) / 100,
-      globalVolume: num(r.global_volume),
-      parentTopic: r.parent_topic ? String(r.parent_topic) : null,
-      intents: r.intents ? JSON.stringify(r.intents) : null,
-      payload: r,
-    })).filter(k => k.keyword),
-  };
+  // Ahrefs was removed from the product (the operator holds no Ahrefs subscription and the
+  // integration is retired): every dispatch that used to reach the API now fails fast with no
+  // network traffic, whatever the client sends.
+  return { items: [], units: 0, error: "ahrefs_removed" };
 }
 
 /**

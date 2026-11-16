@@ -21,7 +21,6 @@ import { getMetricsWithKd, setMetricsWithKd, priceExpand, formatUsd } from "@/li
 
 const OPTIONS: { value: KwSourceSetting; labelKey: string }[] = [
   { value: "auto", labelKey: "kwSrcAuto" },
-  { value: "ahrefs", labelKey: "kwSrcAhrefs" },
   { value: "semrush", labelKey: "kwSrcSemrush" },
   { value: "dataforseo", labelKey: "kwSrcDataForSeo" },
   { value: "off", labelKey: "kwSrcOff" },
@@ -129,7 +128,6 @@ export default function KeywordSourceSettings() {
 }
 
 function sourceLabel(s: KwSourceSetting, t: (k: never) => string): string {
-  if (s === "ahrefs") return "Ahrefs";
   if (s === "semrush") return "Semrush";
   if (s === "dataforseo") return "DataForSEO";
   return t("kwSrcOff" as never);

@@ -8,7 +8,10 @@
 // the provider log and through it the Prisma client. Prices are shared knowledge; sockets are not.
 import { MetricsProvider, parseMetricsProvider, parseKeyssoBase, UNIT_PRICE_USD, estimateCostUsd, estimateKeywordUnits, priceExpand, priceEnrich } from "./metricsPricing";
 
-export const METRICS_PROVIDERS: MetricsProvider[] = ["ahrefs", "semrush", "majestic", "keysso", "dataforseo", "crawlgraph"];
+// "ahrefs" was removed from the product (no subscription, no key storage, no API calls): it is
+// not selectable here, and any legacy stored selection falls through to the server-side
+// ahrefs_removed stubs in metrics.ts instead of a network call.
+export const METRICS_PROVIDERS: MetricsProvider[] = ["semrush", "majestic", "keysso", "dataforseo", "crawlgraph"];
 
 // Keyword-source pricing is defined in `metrics.ts` and re-exported here so the existing browser
 // imports (`priceExpand`/`priceEnrich` from `@/lib/seo/metricsClient`) keep working. The functions

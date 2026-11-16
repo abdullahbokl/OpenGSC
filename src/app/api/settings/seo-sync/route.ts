@@ -26,7 +26,13 @@ export async function PUT(req: Request) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "bad_json" }, { status: 400 }); }
   const settings = body?.settings;
   if (!settings || typeof settings !== "object") return NextResponse.json({ error: "no_settings" }, { status: 400 });
-  const json = JSON.stringify(settings);
+  // Ahrefs was removed from the product: its credentials are never persisted again, so a stale
+  // browser copy cannot silently resurrect them into the mirror on the next page load.
+  const scrubbed = Object.fromEntries(
+    Object.entries(settings as Record<string, unknown>)
+      .filter(([k]) => k !== "seoKey_ahrefs" && k !== "ahrefsDrApiKey" && !k.startsWith("seoKey_ahrefs__")),
+  );
+  const json = JSON.stringify(scrubbed);
   if (json.length > 200_000) return NextResponse.json({ error: "too_large" }, { status: 413 });
   try {
     await rawExec(`UPDATE "User" SET seoSettings = ? WHERE id = ?`, json, userId);

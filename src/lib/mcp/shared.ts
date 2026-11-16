@@ -366,12 +366,13 @@ export interface KeywordSourceCreds {
  */
 export async function resolveKeywordSource(userId: string): Promise<KeywordSourceCreds | null> {
   const s = await getUserSettings(userId);
-  const setting = ["ahrefs", "semrush", "dataforseo", "off"].includes(String(s.seoKwSource))
+  // Ahrefs was removed from the product, so a pinned legacy value and the auto chain skip it.
+  const setting = ["semrush", "dataforseo", "off"].includes(String(s.seoKwSource))
     ? String(s.seoKwSource) : "auto";
   if (setting === "off") return null;
   const limitRaw = parseInt(String(s.seoKwLimit ?? "100"), 10);
   const limit = Number.isFinite(limitRaw) ? Math.max(50, Math.min(200, limitRaw)) : 100;
-  const candidates = setting === "auto" ? ["ahrefs", "semrush", "dataforseo"] : [setting];
+  const candidates = setting === "auto" ? ["semrush", "dataforseo"] : [setting];
   for (const c of candidates) {
     if (c === "dataforseo") {
       const k = String(s.seoKey_dataforseo ?? "").trim();
@@ -382,7 +383,7 @@ export async function resolveKeywordSource(userId: string): Promise<KeywordSourc
     const k = String(s[`seoKey_${c}__${mode}`] || s[`seoKey_${c}`] || "").trim();
     if (k.length > 4) {
       return {
-        source: c as "ahrefs" | "semrush",
+        source: c as "semrush",
         apiKey: k,
         baseUrl: String(s[`seoMetricsBaseUrl_${c}`] ?? "").trim() || undefined,
         limit,

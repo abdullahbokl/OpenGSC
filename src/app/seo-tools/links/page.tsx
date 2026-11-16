@@ -1,16 +1,15 @@
 "use client";
 
-// Link Monitor — the detailed.com/ai-backlinks-api workflow: watch competitor brands,
-// pull their fresh quality backlinks via the Ahrefs API, spot multi-linker domains and
-// content/PR opportunities, with an AI summary on top.
+// Link Monitor — watch competitor brands, find fresh pages on the open web that mention them
+// via the self-hosted SearXNG instance (free, keyless), spot multi-mention domains and
+// content/PR opportunities, with an AI summary on top. Rows are mentions, not verified links —
+// the Ahrefs link-index dependency was removed from the product.
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Loader2, AlertTriangle, Plus, X, RefreshCw, Link2, Sparkles, ExternalLink, Star, Send, Target, Check } from "lucide-react";
+import { Loader2, Plus, X, RefreshCw, Link2, Sparkles, ExternalLink, Star, Send, Target, Check } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { readUrlParam, writeUrlParam } from "@/lib/urlParam";
 import { getTaskCreds , aiCredsReady } from "@/lib/seo/keys";
-import { getMetricsCreds } from "@/lib/seo/metricsClient";
 import { markdownToHtml } from "@/lib/seo/outlineFormat";
 import OutreachWorkspace from "@/components/OutreachWorkspace";
 import { outreachErrorKey } from "@/lib/outreach/types";
@@ -39,11 +38,6 @@ export default function LinkWatchPage() {
   const lang = language || "en";
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
-  // Through the shared resolver rather than reading the storage key by name: the key and the
-  // host it should be sent to are one setting, configured together under Settings → SEO Metrics.
-  // Reading only half of it here is how this page ended up talking to the official API with a
-  // gateway key in the first place.
-  const ahrefsKey = mounted ? getMetricsCreds("ahrefs").apiKey : "";
 
   const [brands, setBrands] = useState<WatchBrand[]>([]);
   const [mentions, setMentions] = useState<LinkMentionRow[]>([]);
@@ -127,14 +121,13 @@ export default function LinkWatchPage() {
   }
 
   async function run() {
-    if (!ahrefsKey) { setErr(t("lwNoKey")); return; }
     setRunning(true); setErr(""); setRunInfo("");
     try {
       const res = await fetch("/api/linkwatch/run", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        // Same key and same host override as the rest of the metrics stack, so a gateway user
-        // does not have to keep a second, official key just for Link Monitor.
-        body: JSON.stringify({ ahrefsKey, baseUrl: getMetricsCreds("ahrefs").baseUrl }),
+        // Free and keyless: the server-side SearXNG instance answers; nothing credential-bearing
+        // travels from the browser.
+        body: JSON.stringify({}),
       });
       const d = await res.json();
       if (!res.ok) setErr(d.error || "error");
@@ -190,11 +183,6 @@ export default function LinkWatchPage() {
 
       {section === "mentions" && <>
 
-      {mounted && !ahrefsKey && (
-        <div className={card} style={{ borderColor: "rgba(255,159,10,0.35)", background: "rgba(255,159,10,0.06)", display: "flex", gap: "10px", alignItems: "center", fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          <AlertTriangle size={18} color="var(--color-accent-orange)" /> {t("lwNoKey")} <Link href="/settings?tab=metrics" style={{ color: "var(--color-accent-blue)" }}>{t("navMetrics")}</Link>
-        </div>
-      )}
       {/* Brands */}
       <div className="panel privacy-blur-all">
         <div className="tool-section-label">{t("lwBrands")} ({brands.length})</div>
@@ -260,7 +248,7 @@ export default function LinkWatchPage() {
                     <a href={m.urlFrom} target="_blank" rel="noreferrer" style={{ color: "var(--color-text-primary)" }}>{m.title || m.urlFrom}</a>
                   </div>
                   <div style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginTop: "2px" }}>
-                    {m.domainFrom} → <b>{m.brand}</b> · DR {Math.round(m.drFrom)}{m.dofollow ? "" : " · nofollow"}{m.anchor ? ` · «${String(m.anchor).slice(0, 60)}»` : ""} · {m.firstSeen}
+                    {m.domainFrom} → <b>{m.brand}</b>{m.firstSeen ? ` · seen ${String(m.firstSeen).slice(0, 10)}` : ""}{m.drFrom > 0 ? ` · DR ${Math.round(m.drFrom)}` : ""}{m.anchor ? ` · «${String(m.anchor).slice(0, 60)}»` : ""}{m.anchor && !m.dofollow ? " · nofollow" : ""}
                   </div>
                   <button onClick={() => addProspect({ domain: m.domainFrom, sourceUrl: m.urlFrom })} disabled={prospectDomains.has(m.domainFrom)} style={{ ...btnGhost, padding: "5px 8px", fontSize: "10px", marginTop: "6px", opacity: prospectDomains.has(m.domainFrom) ? 0.55 : 1 }}>
                     {prospectDomains.has(m.domainFrom) ? <Check size={11} /> : <Plus size={11} />} {t(prospectDomains.has(m.domainFrom) ? "outreachSaved" : "outreachSaveProspect")}

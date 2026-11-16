@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  *
  * The dashboard's /api/dr takes its key from the browser and goes silent when this browser
  * never entered one; the drops button cannot afford that failure mode, so this route resolves
- * the key from the owner's settings (free DR key, paid Ahrefs key as fallback) and persists the
+ * the key from the owner's settings (GoAnyAPI — the only DR source after the Ahrefs removal) and persists the
  * numbers straight onto the candidates. The response carries `keyFound: false` when no key
  * exists anywhere — the UI must say "настроить ключ", not show a silent zero.
  *
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       const remaining = await countPendingDr(userId, runId);
       return NextResponse.json({
         ratings, updated, keyFound, remaining, done: remaining === 0,
-        attribution: "Domain Rating by Ahrefs — https://ahrefs.com/",
+        attribution: "Domain Rating — Ahrefs DR scale via GoAnyAPI",
       });
     }
 
