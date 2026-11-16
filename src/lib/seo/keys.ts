@@ -375,7 +375,7 @@ export function setKwLimit(n: number) {
 /**
  * Resolved source, key and host for the content tools.
  *
- * `auto` walks Ahrefs → Semrush → DataForSEO by which key actually exists, then gives up as
+ * `auto` walks Semrush → DataForSEO by which key actually exists, then gives up as
  * `off`. It reads the metrics module's own storage rather than duplicating it, so switching
  * between an official and a reseller key in Settings → SEO Metrics moves this too, and there is
  * no second place where a stale host can hide.
@@ -389,7 +389,7 @@ export type KwResolvedSource = Exclude<KwSourceSetting, "auto">;
 export function getKeywordSource(): { source: KwResolvedSource; apiKey: string; baseUrl?: string } {
   if (typeof window === "undefined") return { source: "off", apiKey: "" };
 
-  const metricsKey = (p: "ahrefs" | "semrush") => {
+  const metricsKey = (p: "semrush") => {
     const mode = localStorage.getItem(`seoMetricsMode_${p}`);
     const suffixed = mode === "reseller" || mode === "custom" ? `seoKey_${p}__${mode}` : `seoKey_${p}`;
     return (localStorage.getItem(suffixed) || localStorage.getItem(`seoKey_${p}`) || "").trim();
@@ -417,7 +417,7 @@ export function getKeywordSource(): { source: KwResolvedSource; apiKey: string; 
   }
 
   // An explicit choice with no key is reported as that choice with an empty key, so the UI can
-  // say "Ahrefs is selected but not configured" instead of silently behaving like `off`.
+  // say "Semrush is selected but not configured" instead of silently behaving like `off`.
   return { source: setting === "auto" ? "off" : setting, apiKey: "" };
 }
 

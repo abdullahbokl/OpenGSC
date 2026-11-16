@@ -139,10 +139,10 @@ export async function POST(req: Request) {
   // ── Free read ──
   if (!wantFetch || !apiKey) {
     const cached = await readCache();
-    // Domain Rating and referring domains come from a different source entirely (the free
-    // `/api/dr` endpoint and the Ahrefs cache), so they are worth surfacing even when nobody has
-    // ever paid for a Demand overview of this domain.
-    const known = await readDomainCache([domain], "ahrefs");
+    // The DR badge comes from the shared DomainMetricCache (DataForSEO provenance — filled by
+    // this route's own paid fetch and the DFS backlinks module). Ahrefs was removed from the
+    // product, so its cache is no longer consulted here.
+    const known = await readDomainCache([domain], PROVIDER);
     return NextResponse.json({
       domain, country, language,
       summary: cached?.data?.summary ?? null,
@@ -153,7 +153,11 @@ export async function POST(req: Request) {
       priceUsd,
       labsOnly: providerFor(country) === "google_ads",
       usage: await usage(),
-      ...(wantFetch && !apiKey ? { error: "no_key" } : {}),
+      // `no_key` rides along on the free read too — but only when there is also nothing cached:
+      // an empty payload with a price quote and no error would read as "nothing ranks for this
+      // domain" when it is really "no credentials". A key holder's silent cache read stays
+      // silent, and a genuinely empty cache with a key still comes back error-free.
+      ...(!apiKey && !cached ? { error: "no_key" } : {}),
     });
   }
 

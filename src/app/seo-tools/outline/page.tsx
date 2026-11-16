@@ -659,7 +659,7 @@ export default function OutlinePage() {
               {/* Names the provider that actually answered, rather than the one that used to be
                   the only option. The old label read "(DataForSEO)" no matter what. */}
               <div className="tool-section-label">
-                {t("seoKwBlockTitleGeneric")}{kwSource ? ` (${kwSource === "dataforseo" ? "DataForSEO" : kwSource === "ahrefs" ? "Ahrefs" : "Semrush"})` : ""}
+                {t("seoKwBlockTitleGeneric")}{kwSource ? ` (${kwSource === "dataforseo" ? "DataForSEO" : "Semrush"})` : ""}
               </div>
               {kwLoading ? (
                 <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: "7px" }}><Loader2 size={13} className="spin" /> {t("seoKwLoading")}</div>

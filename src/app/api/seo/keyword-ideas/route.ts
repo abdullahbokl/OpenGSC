@@ -15,7 +15,9 @@ import { readUsage, recordUsage, withinCap, releaseUnusedUnits } from "@/lib/seo
 // `fetch: false` returns the price and buys nothing, so the button can quote itself. That is the
 // default: the content tools must not be able to spend money by rendering.
 
-const SOURCES: KwSource[] = ["ahrefs", "semrush", "dataforseo", "off"];
+// Ahrefs was removed from the product: a stale payload naming it is rejected with a clear
+// error instead of reaching a dead dispatch.
+const SOURCES: KwSource[] = ["semrush", "dataforseo", "off"];
 
 export async function POST(req: Request) {
   const userId = await workspaceUserId("spend");
@@ -28,6 +30,9 @@ export async function POST(req: Request) {
   const limit = Math.max(10, Math.min(200, Number(b.limit ?? 100)));
   const withDifficulty = !!b.withDifficulty;
   const mode: IdeaMode = b.mode === "related" ? "related" : "matching";
+  if (String(b.source) === "ahrefs") {
+    return NextResponse.json({ items: [], source: "ahrefs", error: "ahrefs_removed" }, { status: 400 });
+  }
   const source = (SOURCES.includes(b.source) ? b.source : "off") as KwSource;
   const apiKey = String(b.apiKey ?? "").trim();
   const baseUrl = String(b.baseUrl ?? "").trim() || undefined;
@@ -39,7 +44,7 @@ export async function POST(req: Request) {
   // in the shared cache and stays wrong for everyone who reads it later.
   if (!country) return NextResponse.json({ error: "no_country", items: [] }, { status: 400 });
 
-  const provider = source === "ahrefs" || source === "semrush" ? source : null;
+  const provider = source === "semrush" ? source : null;
   const price = priceExpand(source, limit, withDifficulty, mode);
   const usage = provider ? await readUsage(userId, provider) : null;
 
@@ -85,8 +90,9 @@ export async function POST(req: Request) {
     }, { status: 500 });
   }
 
-  // The reservation above priced `limit` rows; Ahrefs billed the rows it actually returned. Give
-  // the difference back before answering, so the month's counter tracks money rather than intent.
+  // The reservation above priced `limit` rows; the provider billed the rows it actually
+  // returned. Give the difference back before answering, so the month's counter tracks money
+  // rather than intent.
   if (provider && price.units) {
     await releaseUnusedUnits(userId, provider, price.units, res.units || 0);
   }

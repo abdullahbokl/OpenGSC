@@ -210,10 +210,10 @@ export default function BacklinkProfile({ siteDbId, dropDomain }: { siteDbId?: s
   // them during the first pass would make the server HTML disagree with the client's.
   const [srcs, setSrcs] = useState<Record<BlProvider, SourceCfg | null>>(NO_PROVIDER);
   const [usage, setUsage] = useState<Record<BlProvider, number | null>>(NO_PROVIDER);
-  // The provider's own balance — free, cached 10 minutes server-side. Only Ahrefs' gateway
-  // exposes one; Majestic's reported figure would be the pooled upstream wallet, so its
-  // placard segment deliberately shows our own counter instead.
-  const [balance, setBalance] = useState<{ info: SubscriptionInfo | null; gatewayStatus: number | null } | null>(null);
+  // Ahrefs' balance slot is permanently null: the provider was removed from the product, so
+  // nothing probes its gateway any more. The ahrefs placard branches below read this as "no
+  // info" and fall through to the honest "balance unknown" segment.
+  const [balance] = useState<{ info: SubscriptionInfo | null; gatewayStatus: number | null } | null>(null);
   // Keys.so's gateway reports a bare remaining figure (free `/limits/all`) — no limit/usage
   // pair — so it gets its own slot rather than being squeezed into the Ahrefs shape.
   const [ksBalance, setKsBalance] = useState<{ remaining: number | null; gatewayStatus: number | null } | null>(null);
@@ -282,7 +282,6 @@ export default function BacklinkProfile({ siteDbId, dropDomain }: { siteDbId?: s
         }))
         .catch(() => setDfsBalance({ remaining: null, gatewayStatus: null }));
     }
-    const creds = getMetricsCreds("ahrefs");
     // Crawlgraph's check is free (GET /releases): a 401 says the key is bad, the headers say
     // how many calls the month still has. No account, no wallet — the tier is the key's own.
     const cg = getMetricsCreds("crawlgraph");
@@ -298,21 +297,8 @@ export default function BacklinkProfile({ siteDbId, dropDomain }: { siteDbId?: s
         }))
         .catch(() => setCgBalance({ remaining: null, gatewayStatus: null }));
     }
-    if (creds.apiKey.length <= 4) return;
-    try {
-      const res = await fetch("/api/metrics/subscription", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "ahrefs", apiKey: creds.apiKey, baseUrl: creds.baseUrl }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (d.usage && typeof d.usage.units === "number") {
-        setUsage(u => ({ ...u, ahrefs: Number(d.usage.units) }));
-      }
-      setBalance({
-        info: d.info ?? null,
-        gatewayStatus: typeof d.gatewayStatus === "number" ? d.gatewayStatus : null,
-      });
-    } catch { setBalance({ info: null, gatewayStatus: null }); }
+    // No Ahrefs probe: the provider was removed from the product, and a stale browser key must
+    // never open a connection to it — not even for a free balance check.
   }, [guest]);
 
   useEffect(() => { loadBalance().catch(() => {}); }, [loadBalance]);
@@ -360,7 +346,6 @@ export default function BacklinkProfile({ siteDbId, dropDomain }: { siteDbId?: s
   }, [t]);
 
   const call = useCallback(async (doFetch: boolean) => {
-    const credsA = getMetricsCreds("ahrefs");
     const credsM = getMetricsCreds("majestic");
     const credsS = getMetricsCreds("semrush");
     const credsK = getMetricsCreds("keysso");
@@ -374,7 +359,6 @@ export default function BacklinkProfile({ siteDbId, dropDomain }: { siteDbId?: s
       // Both providers travel every time; the route pulls only what the view needs and only
       // what has a key. Per-provider caps ride along — the two units are not comparable.
       body.creds = {
-        ahrefs: { apiKey: credsA.apiKey, baseUrl: credsA.baseUrl, cap: credsA.cap },
         majestic: { apiKey: credsM.apiKey, baseUrl: credsM.baseUrl, cap: credsM.cap },
         semrush: { apiKey: credsS.apiKey, baseUrl: credsS.baseUrl, cap: credsS.cap },
         keysso: { apiKey: credsK.apiKey, baseUrl: credsK.baseUrl, cap: credsK.cap },

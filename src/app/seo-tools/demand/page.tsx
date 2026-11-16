@@ -10,7 +10,7 @@
 //   • you appear but far below → you have something, it is not treated as the answer
 //   • nothing at all → write it
 //
-// Ahrefs knows the first half of every row. Search Console knows the second. Neither knows both,
+// The provider knows the first half of every row. Search Console knows the second. Neither knows both,
 // which is the entire reason this screen exists.
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";

@@ -2333,17 +2333,21 @@ export async function genCluster(b: GenBody): Promise<GenResult> {
   const gl = String(b.gl ?? "us"), hl = String(b.hl ?? "en");
   const threshold = Math.max(2, Math.min(6, Number(b.threshold ?? 3)));
 
-  // 1) volumes (optional) — through the shared source, so Ahrefs and Semrush work here too.
-  //    `kwSource`/`kwKey` are the new fields; `dfsKey` is still honoured so a job queued before
-  //    this change, or a caller not yet updated, keeps working exactly as it did.
-  const kwSource: KwSource = ["ahrefs", "semrush", "dataforseo"].includes(String(b.kwSource))
+  // 1) volumes (optional) — through the shared source (Semrush / DataForSEO).
+  //    `kwSource`/`kwKey` are the fields; `dfsKey` is still honoured so a job queued before
+  //    this change, or a caller not yet updated, keeps working exactly as it did. Ahrefs was
+  //    removed from the product: a stale payload naming it is rejected loudly — it never
+  //    reaches a dispatch, and the volumes_error travels with the result instead of failing
+  //    the whole cluster job over an optional enrichment.
+  const kwSource: KwSource = ["semrush", "dataforseo"].includes(String(b.kwSource))
     ? String(b.kwSource) as KwSource
     : b.dfsKey ? "dataforseo" : "off";
   const kwKey = String(b.kwKey ?? b.dfsKey ?? "");
+  const staleAhrefs = String(b.kwSource) === "ahrefs";
 
   const vres = kwSource !== "off" && kwKey
     ? await fetchClusterVolumes({ source: kwSource, apiKey: kwKey, baseUrl: b.kwBaseUrl ? String(b.kwBaseUrl) : undefined }, keywords, gl, hl)
-    : { volumes: {} as Record<string, number>, error: undefined as string | undefined };
+    : { volumes: {} as Record<string, number>, error: staleAhrefs ? "ahrefs_removed" as string | undefined : undefined as string | undefined };
   const volumes = vres.volumes;
 
   // 2) TOP-10 per keyword (bounded concurrency)

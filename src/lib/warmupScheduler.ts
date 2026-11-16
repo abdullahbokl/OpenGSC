@@ -59,7 +59,7 @@ async function readSettings(userId: string): Promise<{
   apiKey: string;
   baseUrl?: string;
 }> {
-  const blank = { schedule: DEFAULT_WARMUP_SCHEDULE, provider: "ahrefs" as MetricsProvider, apiKey: "" };
+  const blank = { schedule: DEFAULT_WARMUP_SCHEDULE, provider: "semrush" as MetricsProvider, apiKey: "" };
   try {
     const rows = await rawQuery<{ seoSettings?: string | null }[]>(`SELECT seoSettings FROM "User" WHERE id = ?`, userId);
     const raw = rows?.[0]?.seoSettings;
@@ -70,9 +70,10 @@ async function readSettings(userId: string): Promise<{
     // are Yandex's). An active link-only provider
     // therefore runs the schedule on whichever keyword-capable key exists, Ahrefs first — the
     // same resolution the browser's keyword screens make client-side.
-    const active = String(s.seoMetricsProvider ?? "ahrefs");
+    const active = String(s.seoMetricsProvider ?? "semrush");
     const activeP = parseMetricsProvider(active);
-    const candidates: MetricsProvider[] = isKeywordCapable(activeP) ? [activeP] : ["ahrefs", "semrush"];
+    // Ahrefs was removed from the product — the fallback chain is Semrush only.
+    const candidates: MetricsProvider[] = isKeywordCapable(activeP) ? [activeP] : ["semrush"];
     let provider: MetricsProvider = candidates[0];
     let apiKey = "";
     let baseUrl: string | undefined;

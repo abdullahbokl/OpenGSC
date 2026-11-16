@@ -64,12 +64,14 @@ export const DEFAULT_BASE_URL: Record<MetricsProvider, string> = {
  * The one provider parse for every route and tool that takes `provider` from a request body.
  *
  * The old per-route ternaries (`b.provider === "semrush" ? "semrush" : "ahrefs"`) predates the
- * third provider and would have coerced a Majestic key into an Ahrefs request — a 401 that
- * looks like a broken key while the screen says "Connected". Unknown values still fall back to
- * ahrefs, which keeps old clients (and hand-rolled curl calls) working unchanged.
+ * third provider and would have coerced a Majestic key into a request to the wrong host — a 401
+ * that looks like a broken key while the screen says "Connected". Unknown values fall back to
+ * semrush (a live, keyword-capable provider): with no key the route's `no_key` answers honestly,
+ * and nothing can ever reach Ahrefs — that provider was removed from the product, so a stale
+ * browser key or an old payload must never open a connection to it.
  */
 export function parseMetricsProvider(v: unknown): MetricsProvider {
-  return v === "semrush" || v === "majestic" || v === "keysso" || v === "dataforseo" || v === "crawlgraph" ? v : "ahrefs";
+  return v === "semrush" || v === "majestic" || v === "keysso" || v === "dataforseo" || v === "crawlgraph" ? v : "semrush";
 }
 
 // ─── Cost model ────────────────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ test("pricing: the meter is calls — flat 1 unit per backlinks/changes call, 1 
 
 test("provider plumbing: parse, keyword guard, calls on screen", () => {
   assert.equal(parseMetricsProvider("crawlgraph"), "crawlgraph");
-  assert.equal(parseMetricsProvider("nope"), "ahrefs"); // unknown still falls back
+  assert.equal(parseMetricsProvider("nope"), "semrush"); // unknown falls back to the live keyword-capable default, never the removed ahrefs
   assert.equal(isKeywordCapable("crawlgraph"), false); // no keyword side, like Majestic
   assert.equal(metersInDollars("crawlgraph"), false); // the cap is a call count, not dollars
   assert.equal(formatProviderUnits(2, "crawlgraph"), "2");

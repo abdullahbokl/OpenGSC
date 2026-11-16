@@ -67,7 +67,9 @@ export async function POST(req: Request) {
   // market here, so a Google country can never be filled with Yandex positions.
   const yandex = rawCountry === YANDEX_MARKET;
   const requested = parseMetricsProvider(b.provider);
-  const provider = yandex ? "keysso" : requested === "keysso" ? "ahrefs" : requested;
+  // Keys.so serves Yandex only; a Keys.so key paired with a Google market falls back to
+  // Semrush (keyword-capable, live) — never to the removed Ahrefs provider.
+  const provider = yandex ? "keysso" : requested === "keysso" ? "semrush" : requested;
   const apiKey = String(b.apiKey ?? "").trim();
   const baseUrl = String(b.baseUrl ?? "").trim() || undefined;
   const cap = Number(b.cap ?? 0);

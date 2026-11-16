@@ -344,7 +344,7 @@ export async function resolveSerpCreds(userId: string, args: Json = {}): Promise
 }
 
 export interface KeywordSourceCreds {
-  source: "ahrefs" | "semrush" | "dataforseo";
+  source: "semrush" | "dataforseo";
   apiKey: string;
   baseUrl?: string;
   /** How many ideas one expansion may ask for — the ceiling on what it can cost. */
@@ -357,7 +357,7 @@ export interface KeywordSourceCreds {
  * Server-side mirror of `getKeywordSource()` (lib/seo/keys.ts) — the keyword provider the
  * Outline page's "load keywords" step uses. The browser reads localStorage; everything it
  * reads is mirrored into User.seoSettings by SeoKeysSync under the same names, so this walks
- * the same Ahrefs → Semrush → DataForSEO chain over the same keys: reseller mode suffix
+ * the same Semrush → DataForSEO chain over the same keys: reseller mode suffix
  * (`seoKey_<p>__reseller`), custom host (`seoMetricsBaseUrl_<p>`) and the idea limit
  * (`seoKwLimit`, clamped exactly like the UI clamps it).
  *

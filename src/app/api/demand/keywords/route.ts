@@ -203,7 +203,9 @@ export async function POST(req: Request) {
       cachedAt: cached?.at ?? null,
       priceUsd,
       usage: await usage(),
-      ...(wantFetch && !apiKey ? { error: "no_key" } : {}),
+      // Same rule as /api/demand/domain: `no_key` only when there is nothing cached either —
+      // an empty result without it would read as "no demand" when it is "no credentials".
+      ...(!apiKey && !cached ? { error: "no_key" } : {}),
     });
   }
 

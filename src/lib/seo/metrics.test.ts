@@ -103,13 +103,15 @@ test("estimateProfileUnits prices the stats call, the full row set, and one floo
 // another host (a 401 that looks like a broken key), and a silent price edit would make every
 // "≈ $0.01" chip on the screen a lie.
 
-test("parseMetricsProvider keeps known providers and falls back to ahrefs", () => {
+test("parseMetricsProvider keeps known providers and falls back to semrush (never ahrefs)", () => {
   assert.equal(parseMetricsProvider("semrush"), "semrush");
   assert.equal(parseMetricsProvider("majestic"), "majestic");
-  assert.equal(parseMetricsProvider("ahrefs"), "ahrefs");
-  // Anything else — old clients, hand-typed curl — was ahrefs before there were alternatives.
-  assert.equal(parseMetricsProvider("gsc"), "ahrefs");
-  assert.equal(parseMetricsProvider(undefined), "ahrefs");
+  assert.equal(parseMetricsProvider("ahrefs"), "semrush");
+  // Ahrefs was removed from the product: an unknown value (old clients, hand-typed curl, a
+  // stale payload) resolves to the live keyword-capable default, so nothing can steer a
+  // request at the removed host — with no key the route's `no_key` answers honestly.
+  assert.equal(parseMetricsProvider("gsc"), "semrush");
+  assert.equal(parseMetricsProvider(undefined), "semrush");
 });
 
 test("gateway unit prices are the reseller's published rate card", () => {

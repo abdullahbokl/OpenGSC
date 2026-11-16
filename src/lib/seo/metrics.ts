@@ -143,43 +143,9 @@ export async function fetchSubscriptionInfo(creds: MetricsCreds): Promise<Subscr
   if (creds.provider === "crawlgraph") return crawlgraphSubscription(creds);
   // Semrush's protocol has no equivalent report; Majestic's `GetSubscriptionInfo` reports the
   // pooled upstream plan, deliberately not the caller's own credit ledger. Both fall back to
-  // our own estimate rather than quote somebody else's wallet.
-  if (creds.provider !== "ahrefs") return { info: null, status: 0, error: "provider_unsupported" };
-
-  const base = (creds.baseUrl || DEFAULT_BASE_URL.ahrefs).replace(/\/+$/, "");
-  const cacheKey = `${creds.apiKey}|${base}`;
-  const hit = subscriptionCache.get(cacheKey);
-  if (hit && Date.now() - hit.at < SUBSCRIPTION_TTL_MS) return { info: hit.info, status: 200 };
-
-  let res: Response;
-  try {
-    res = await requestWithRetry(
-      `${base}/v3/subscription-info/limits-and-usage`,
-      { headers: { Authorization: `Bearer ${creds.apiKey}`, Accept: "application/json" } },
-      creds.apiKey, creds.provider,
-    );
-  } catch (e) {
-    return { info: null, status: 0, error: String((e as Error)?.message ?? e) };
-  }
-  if (!res.ok) {
-    return { info: null, status: res.status, error: `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)}` };
-  }
-
-  const d = await res.json().catch(() => null);
-  // The gateway wraps reports in a top-level key like every list endpoint; accepting a flat
-  // body too costs nothing and keeps a wrapper rename from reading as "no balance available".
-  const s = d?.subscription_info ?? d?.limits_and_usage ?? d ?? {};
-  const info: SubscriptionInfo = {
-    unitsLimitApiKey: num(s.units_limit_api_key),
-    unitsUsageApiKey: num(s.units_usage_api_key),
-    unitsLimitWorkspace: num(s.units_limit_workspace),
-    unitsUsageWorkspace: num(s.units_usage_workspace),
-    usageResetDate: String(s.usage_reset_date ?? "").slice(0, 10),
-    apiKeyExpirationDate: String(s.api_key_expiration_date ?? "").slice(0, 10),
-    fetchedAt: new Date().toISOString(),
-  };
-  subscriptionCache.set(cacheKey, { at: Date.now(), info });
-  return { info, status: 200 };
+  // our own estimate rather than quote somebody else's wallet. Ahrefs was removed from the
+  // product — nothing here may open a network connection to it, even with a stale browser key.
+  return { info: null, status: 0, error: "provider_unsupported" };
 }
 
 // ─── Normalized shapes ─────────────────────────────────────────────────────────

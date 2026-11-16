@@ -59,7 +59,7 @@ export interface MetricsClientCreds {
 }
 
 export function getMetricsProvider(): MetricsProvider {
-  if (typeof window === "undefined") return "ahrefs";
+  if (typeof window === "undefined") return "semrush";
   return parseMetricsProvider(localStorage.getItem("seoMetricsProvider"));
 }
 
@@ -127,15 +127,13 @@ export function getMetricsCreds(provider?: MetricsProvider): MetricsClientCreds 
  *
  * Majestic holds no keyword data (and Keys.so's is Yandex's, a different market), so a caller
  * about to price or fetch keywords must not ride the active provider when it is either — the key would be sent to a provider that has nothing to
- * answer with. Instead the call falls back to whichever keyword-capable key exists, Ahrefs
- * first, exactly the order the auto keyword-source chain walks. With neither key present the
- * Ahrefs-shaped empty creds come back and the route's `no_key` answers honestly.
+ * answer with. Instead the call falls back to Semrush, the keyword-capable default. Ahrefs was
+ * removed from the product: a stale `seoKey_ahrefs` in localStorage must never steer a request
+ * at it. With no Semrush key present the empty creds come back and the route's `no_key`
+ * answers honestly.
  */
 export function getKeywordCapableCreds(): MetricsClientCreds {
-  const active = getMetricsProvider();
-  if (active === "ahrefs" || active === "semrush") return getMetricsCreds(active);
-  const fallback: MetricsProvider = hasMetricsKey("ahrefs") ? "ahrefs" : "semrush";
-  return getMetricsCreds(fallback);
+  return getMetricsCreds("semrush");
 }
 
 export function hasMetricsKey(provider?: MetricsProvider): boolean {

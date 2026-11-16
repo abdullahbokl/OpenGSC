@@ -2,7 +2,7 @@
 
 // Competitor keyword gap.
 //
-// The value is not the competitor's keyword list — Ahrefs shows that already. It is the join
+// The value is not the competitor's keyword list — the provider shows that already. It is the join
 // with your own Search Console data, which produces three categorically different answers that
 // no single tool can give:
 //
@@ -125,7 +125,7 @@ export default function CompetitorsPage() {
     if (Array.isArray(d.unsupported)) setUnsupported(d.unsupported);
     if (!res.ok) {
       setNotice(d.error === "cap_exceeded" ? t("kwCapExceeded")
-        : d.error === "provider_unsupported" ? t("blpAhrefsOnly")
+        : d.error === "provider_unsupported" ? t("blpAhrefsOnly") // legacy key; copy is provider-neutral after the i18n reword
         : d.error === "not_migrated" ? t("gapNotMigrated")
         : d.error === "write_not_visible" ? t("gapWriteNotVisible")
         : t("gapFailed"));
@@ -280,7 +280,7 @@ export default function CompetitorsPage() {
       </div>
 
       {/* Competitor input — always available once a site is picked. Auto-discovered suggestions
-          appear at the top when Ahrefs knows them, but for a small/new domain Ahrefs returns
+          appear at the top when the provider knows them, but for a small/new domain it returns
           nothing, and hiding the manual entry behind "found something" made the tool look broken
           exactly there. The pull button works for any domain the user types. */}
       {siteId && (
@@ -325,7 +325,7 @@ export default function CompetitorsPage() {
             </div>
           )}
 
-          {/* Manual entry — the only path for a domain Ahrefs has no organic-keyword footprint for.
+          {/* Manual entry — the only path for a domain the provider has no organic-keyword footprint for.
               Shown whether or not discovery returned anything, with a hint explaining why a small
               site may need it. */}
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>

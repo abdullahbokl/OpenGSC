@@ -291,7 +291,7 @@ test("alert-cron logs its calls against the user being alerted", async () => {
 test("warmup-cron logs its calls against the user whose budget is spent", async () => {
   reset();
   world.raw = {
-    rawQuery: async () => [{ seoSettings: JSON.stringify({ seoKey_ahrefs: "k", seoWarmupSchedule: { enabled: true, cap: 100, withDifficulty: false, lastRunAt: null } }) }],
+    rawQuery: async () => [{ seoSettings: JSON.stringify({ seoKey_semrush: "k", seoWarmupSchedule: { enabled: true, cap: 100, withDifficulty: false, lastRunAt: null } }) }],
     rawExec: async () => undefined,
   };
   world.prisma = {

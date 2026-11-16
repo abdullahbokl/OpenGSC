@@ -37,7 +37,8 @@ import {
 import { readKeywordCacheAny, writeKeywordCache, staleKeywords, normalizeKeyword, type CachedKeyword } from "./metricsStore";
 import { defaultLanguageFor } from "./regions";
 
-export type KwSource = "ahrefs" | "semrush" | "dataforseo" | "off";
+// Ahrefs was removed from the product — the union no longer carries it.
+export type KwSource = "semrush" | "dataforseo" | "off";
 
 export interface KwCreds {
   source: KwSource;

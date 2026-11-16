@@ -82,7 +82,16 @@ export default function MetricsSettingsSection() {
   // localStorage after mount only — reading it during render would make the first client pass
   // disagree with the server-rendered HTML.
   useEffect(() => {
-    setProvider(parseMetricsProvider(localStorage.getItem("seoMetricsProvider")));
+    // A stale pre-removal `seoMetricsProvider="ahrefs"` is normalized to DataForSEO (the
+    // product default) and rewritten, so the removed provider is never the active selection.
+    // Valid values pass through untouched.
+    const raw = localStorage.getItem("seoMetricsProvider");
+    if (raw === "ahrefs") {
+      setProvider("dataforseo");
+      localStorage.setItem("seoMetricsProvider", "dataforseo");
+    } else {
+      setProvider(parseMetricsProvider(raw));
+    }
     setKsBase(getKeyssoBase());
   }, []);
 
@@ -370,7 +379,7 @@ export default function MetricsSettingsSection() {
                 {sub.gatewayStatus === 401 ? t("metricsKeyssoBadKey") : t("blsrcKsOutOfCredits")}
               </div>
             )}
-            {(provider === "ahrefs" || provider === "majestic" || provider === "keysso") && sub && !sub.info
+            {(provider === "majestic" || provider === "keysso") && sub && !sub.info
               && !(provider === "keysso" && (sub.gatewayStatus === 401 || sub.gatewayStatus === 402)) && (
               <div style={{ marginTop: "4px", color: "var(--color-text-tertiary)" }}>{t("blsrcBalanceUnknown")}</div>
             )}

@@ -61,7 +61,7 @@ export default function MetricsWarmup() {
   }, []);
 
   // Warmup loads keyword weights, so its creds resolve off Majestic onto a keyword-capable key.
-  const creds = mounted ? getKeywordCapableCreds() : { provider: "ahrefs" as const, apiKey: "", baseUrl: "", cap: 0 };
+  const creds = mounted ? getKeywordCapableCreds() : { provider: "semrush" as const, apiKey: "", baseUrl: "", cap: 0 };
   const hasKey = creds.apiKey.length > 4;
 
   const body = useCallback((doFetch: boolean) => ({
