@@ -3158,8 +3158,8 @@
   "gapKeywords": "zoekwoorden",
   "gapPull": "Zoekwoorden laden",
   "gapManualPh": "competitor.com",
-  "gapManualHint": "Geen suggesties? Typ een concurrent die je kent — werkt voor nieuwe/kleine websites die Ahrefs nog niet in kaart heeft.",
-  "gapNoKey": "Vereist een sleutel van een metrics-provider — deze module heeft nog geen importpad",
+  "gapManualHint": "Geen suggesties? Typ een concurrent die u kent — werkt ook voor nieuwe/kleine sites die providers nog niet in kaart hebben.",
+  "gapNoKey": "Geen metrics-provider-sleutel en het gratis SERP-pad is niet beschikbaar — configureer SearXNG of een Serper-sleutel in Instellingen → SEO Tools.",
   "gapFailed": "Concurrentgegevens konden niet geladen worden",
   "gapNotMigrated": "Voer prisma db push uit — de concurrenttabellen ontbreken",
   "gapEmpty": "Nog niets geladen. Zoek concurrenten en haal daarna de zoekwoorden van een van hen op.",
@@ -5972,5 +5972,9 @@
   "fpIgnoreFail": "Verbergen/tonen kon niet worden opgeslagen — probeer opnieuw.",
   "rwSaveToHistory": "Opslaan in geschiedenis",
   "rwSavedHistory": "Opgeslagen",
-  "rwSaveHistHint": "Slaat deze variant op in de geschiedenis (als artikel), zodat een reload hem niet verliest."
+  "rwSaveHistHint": "Slaat deze variant op in de geschiedenis (als artikel), zodat een reload hem niet verliest.",
+  "gapFreeCost": "Gratis — draait op SearXNG / uw SERP-provider",
+  "gapFreeNote": "Gratis modus: posities en URL's hieronder zijn waarnemingen uit live SERP-resultaten. Volume en KD: n.v.t. — er wordt geen metrics-provider gebruikt en niets wordt geschat. Sommige keywords zijn gescraped van concurrentpagina's en in het SERP geverifieerd.",
+  "gapFreeUnavailable": "Gratis pad niet beschikbaar: geen SearXNG en geen Serper-sleutel. Voeg een metrics-provider-sleutel toe of configureer SearXNG in Instellingen → SEO Tools.",
+  "gapFreeSerpFailed": "SERP-ophaal mislukt — de zoek-backend leverde geen resultaten."
 }

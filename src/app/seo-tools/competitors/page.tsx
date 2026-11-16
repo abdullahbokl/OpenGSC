@@ -22,6 +22,9 @@ import {
 } from "@/lib/seo/metricsClient";
 // Prices only, from the module that has no network half — see `metricsPricing.ts`.
 import { estimateCompetitorUnits, estimateOrganicKeywordUnits, keyssoListUnits, keyssoBaseLabel, YANDEX_MARKET } from "@/lib/seo/metricsPricing";
+// The free path's SERP credentials: SearXNG is server-side (keyless), Serper rides the browser's
+// own SERP-provider settings so the free path can still run for users who hold a Serper key.
+import { serpPayload } from "@/lib/seo/keys";
 
 // Keys.so key present? false on the server pass, real once hydrated. The Yandex market only
 // appears in the market list for users who connected Keys.so.
@@ -82,6 +85,19 @@ export default function CompetitorsPage() {
    * out of the quote — the tool stops selling a column it cannot deliver.
    */
   const [unsupported, setUnsupported] = useState<string[]>([]);
+  /**
+   * Which engine filled the table: "paid" (Semrush/Keys.so rows, provider volumes) or "free"
+   * (live SERP observations, volume/KD genuinely absent). Set from each response's `mode` so the
+   * provenance note renders next to the numbers it describes — never baked in at mount, because
+   * the same screen can hold both kinds of data across pulls.
+   */
+  const [mode, setMode] = useState<"paid" | "free">("paid");
+  /**
+   * The free path can run at all: the server's SearXNG answered a real probe, or the browser
+   * holds a Serper key as the server-side fallback. Checked with a real search, not a socket
+   * check — the status endpoint already does that work.
+   */
+  const [freeOk, setFreeOk] = useState(false);
   const keysso = useKeyssoKey();
   const yandex = country === YANDEX_MARKET;
   // Keys.so has no KD column at all — the checkbox would sell nothing on the Yandex market.
@@ -96,6 +112,13 @@ export default function CompetitorsPage() {
     setCountry(localStorage.getItem("seoGapYandex") === "1" && hasMetricsKey("keysso")
       ? YANDEX_MARKET
       : localStorage.getItem("seoMetricsCountry") || "us");
+    // Free-path availability. SearXNG first (keyless, self-hosted — the status endpoint runs a
+    // real query), then the browser's own SERP key as what the server falls back to.
+    fetch("/api/seo/serp/searxng/status")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d?.ok) setFreeOk(true); })
+      .catch(() => {});
+    if (serpPayload().serpKey) setFreeOk(true);
     fetch("/api/gsc/sites")
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
@@ -108,13 +131,16 @@ export default function CompetitorsPage() {
 
   const call = useCallback(async (action: string, extra: Record<string, unknown> = {}) => {
     if (!siteId) return null;
-    // Keyword-side route: resolves off Majestic onto a keyword-capable key — or Keys.so on the
-    // Yandex market.
+    // Provider resolution, in order: Keys.so on the Yandex market; the keyword-capable metrics
+    // key when one exists; otherwise the free path — SERP-observed competitors built from the
+    // site's own GSC queries, no metrics provider involved at all.
+    const freeMode = !yandex && !hasKey;
     const creds = credsFor();
-    const body: Record<string, unknown> = { siteId, country, action, provider: creds.provider, ...extra };
+    const body: Record<string, unknown> = { siteId, country, action, provider: freeMode ? "free" : creds.provider, ...extra };
     if (country === YANDEX_MARKET) body.keyssoBase = region;
     if (action !== "read") {
-      Object.assign(body, { apiKey: creds.apiKey, baseUrl: creds.baseUrl, cap: creds.cap });
+      if (freeMode) Object.assign(body, serpPayload());
+      else Object.assign(body, { apiKey: creds.apiKey, baseUrl: creds.baseUrl, cap: creds.cap });
     }
     const res = await fetch("/api/metrics/gap", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -123,11 +149,14 @@ export default function CompetitorsPage() {
     if (Array.isArray(d.rows)) setRows(d.rows);
     if (Array.isArray(d.competitors)) setCompetitors(d.competitors);
     if (Array.isArray(d.unsupported)) setUnsupported(d.unsupported);
+    if (d.mode === "free") setMode("free"); else if (action !== "read") setMode("paid");
     if (!res.ok) {
       setNotice(d.error === "cap_exceeded" ? t("kwCapExceeded")
         : d.error === "provider_unsupported" ? t("blpAhrefsOnly") // legacy key; copy is provider-neutral after the i18n reword
         : d.error === "not_migrated" ? t("gapNotMigrated")
         : d.error === "write_not_visible" ? t("gapWriteNotVisible")
+        : d.error === "free_unavailable" ? t("gapFreeUnavailable")
+        : d.error === "free_serp_failed" ? `${t("gapFreeSerpFailed")}${d.errorDetail ? ` (${String(d.errorDetail)})` : ""}`
         : t("gapFailed"));
       return null;
     }
@@ -140,7 +169,7 @@ export default function CompetitorsPage() {
     }
     setNotice("");
     return d;
-  }, [siteId, country, t, credsFor, region]);
+  }, [siteId, country, t, credsFor, region, hasKey, yandex]);
 
   // Free read of what is stored, on every site/market change.
   useEffect(() => { if (siteId) call("read").catch(() => {}); }, [siteId, country, call]);
@@ -213,7 +242,9 @@ export default function CompetitorsPage() {
   }
 
   const creds = credsFor();
-  const canPull = yandex ? keysso : hasKey;
+  // Free mode: no metrics key on a Google market — the pull runs on SearXNG/Serper instead.
+  const freeMode = !yandex && !hasKey;
+  const canPull = yandex ? keysso : (hasKey || freeOk);
   const discoverCost = estimateCostUsd(yandex ? 1 : estimateCompetitorUnits(20), creds.provider);
   const pullUnits = yandex ? keyssoListUnits(limit) : estimateOrganicKeywordUnits(limit, withKd && !kdBlocked);
   const pullCost = estimateCostUsd(pullUnits, creds.provider);
@@ -275,7 +306,8 @@ export default function CompetitorsPage() {
           {busy === "competitors" ? <Loader2 size={13} className="spin" /> : <Search size={13} />}
           {t("gapDiscover")}
         </button>
-        {canPull && <span className="metric-cost">{yandex ? `1 ${t("blsrcKsCredits")} · ` : ""}≈ {formatUsd(discoverCost)}</span>}
+        {canPull && freeMode && <span className="metric-cost">{t("gapFreeCost")}</span>}
+        {canPull && !freeMode && <span className="metric-cost">{yandex ? `1 ${t("blsrcKsCredits")} · ` : ""}≈ {formatUsd(discoverCost)}</span>}
         {notice && <span style={{ fontSize: "12px", color: "var(--color-danger)" }}>{notice}</span>}
       </div>
 
@@ -287,15 +319,20 @@ export default function CompetitorsPage() {
         <div className="panel">
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
             <span className="tool-section-label" style={{ marginBottom: 0 }}>{t("gapCompetitors")}</span>
-            {!yandex && <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--color-text-secondary)", cursor: "pointer" }} title={t("kwWithKdHint")}>
+            {/* KD exists only on the paid path — the free path never had it to offer, so the
+                checkbox disappears rather than sitting disabled with nothing to say. */}
+            {!yandex && !freeMode && <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--color-text-secondary)", cursor: "pointer" }} title={t("kwWithKdHint")}>
               <input type="checkbox" checked={withKd && !kdBlocked} disabled={kdBlocked}
                 onChange={e => setWithKd(e.target.checked)} /> {t("kwWithKd")}
               {kdBlocked && <span style={{ fontSize: "11px", color: "var(--color-text-tertiary)" }}>({t("gapKdUnsupported")})</span>}
             </label>}
-            <select className="tool-input inline" value={limit} onChange={e => setLimit(Number(e.target.value))}>
+            {!freeMode && <select className="tool-input inline" value={limit} onChange={e => setLimit(Number(e.target.value))}>
               {[100, 200, 500, 1000].map(n => <option key={n} value={n}>{n} {t("gapKeywords")}</option>)}
-            </select>
-            <span className="metric-cost">{pullUnits.toLocaleString()} {yandex ? t("blsrcKsCredits") : t("metricsUnits")} · ≈ {formatUsd(pullCost)}</span>
+            </select>}
+            <span className="metric-cost">
+              {freeMode ? t("gapFreeCost")
+                : `${pullUnits.toLocaleString()} ${yandex ? t("blsrcKsCredits") : t("metricsUnits")} · ≈ ${formatUsd(pullCost)}`}
+            </span>
           </div>
           {/* Said once, where the market is chosen: on Yandex both sides of the gap are Yandex. */}
           {yandex && (
@@ -339,6 +376,16 @@ export default function CompetitorsPage() {
             </button>
             <span style={{ fontSize: "11px", color: "var(--color-text-tertiary)" }}>{t("gapManualHint")}</span>
           </div>
+        </div>
+      )}
+
+      {/* Provenance, said where the numbers live: free-mode rows are live SERP observations made
+          on the day of the pull — positions and the URL are real, volume and KD are not
+          unavailable-by-bug but unavailable-by-provider, and the em dashes in those columns are
+          the honest rendering of that. */}
+      {mode === "free" && rows.length > 0 && (
+        <div style={{ fontSize: "11px", color: "var(--color-text-tertiary)", lineHeight: 1.55, maxWidth: "760px" }}>
+          {t("gapFreeNote")}
         </div>
       )}
 

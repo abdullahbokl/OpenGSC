@@ -3158,8 +3158,8 @@
   "gapKeywords": "个关键词",
   "gapPull": "加载关键词",
   "gapManualPh": "competitor.com",
-  "gapManualHint": "没有建议？手动输入一个已知的竞争对手——适用于 Ahrefs 尚未收录的新/小网站。",
-  "gapNoKey": "需要指标服务商密钥——此模块尚无导入途径",
+  "gapManualHint": "没有建议？直接输入您知道的竞争对手——同样适用于提供商尚未收录的新站/小站。",
+  "gapNoKey": "没有指标提供商密钥，且免费 SERP 通道不可用——请在“设置 → SEO Tools”中配置 SearXNG 或 Serper 密钥。",
   "gapFailed": "无法加载竞争对手数据",
   "gapNotMigrated": "请运行 prisma db push——竞争对手表缺失",
   "gapEmpty": "尚未加载内容。请先发现竞争对手，然后拉取其中一个的关键词。",
@@ -5972,5 +5972,9 @@
   "fpIgnoreFail": "隐藏/取消隐藏操作未能保存——请重试。",
   "rwSaveToHistory": "保存到历史",
   "rwSavedHistory": "已保存",
-  "rwSaveHistHint": "将此变体保存到历史（作为文章），刷新后不会丢失。"
+  "rwSaveHistHint": "将此变体保存到历史（作为文章），刷新后不会丢失。",
+  "gapFreeCost": "免费 — 通过 SearXNG / 您的 SERP 提供商运行",
+  "gapFreeNote": "免费模式：下方的排名和 URL 来自实时 SERP 观测结果。搜索量和 KD 为 N/A——不使用任何指标提供商，也不做任何估算。部分关键词抓取自竞争对手页面并在 SERP 中验证。",
+  "gapFreeUnavailable": "免费通道不可用：没有 SearXNG，也没有 Serper 密钥。请添加指标提供商密钥，或在“设置 → SEO Tools”中配置 SearXNG。",
+  "gapFreeSerpFailed": "SERP 拉取失败——搜索后端未返回任何结果。"
 }

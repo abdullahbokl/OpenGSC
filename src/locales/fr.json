@@ -3158,8 +3158,8 @@
   "gapKeywords": "mots-clés",
   "gapPull": "Charger les mots-clés",
   "gapManualPh": "concurrent.com",
-  "gapManualHint": "Pas de suggestions ? Saisissez un concurrent à la main — utile pour les sites nouveaux/petits qu'Ahrefs ne connaît pas encore.",
-  "gapNoKey": "Nécessite une clé de fournisseur de métriques — ce module n'a pas encore d'import",
+  "gapManualHint": "Aucune suggestion ? Saisissez un concurrent que vous connaissez — fonctionne aussi pour les sites nouveaux/petits que les fournisseurs ne recensent pas encore.",
+  "gapNoKey": "Aucune clé de fournisseur de métriques, et le chemin SERP gratuit est indisponible — configurez SearXNG ou une clé Serper dans Paramètres → SEO Tools.",
   "gapFailed": "Impossible de charger les données concurrentes",
   "gapNotMigrated": "Exécutez prisma db push — les tables concurrents sont manquantes",
   "gapEmpty": "Rien de chargé pour le moment. Trouvez des concurrents, puis tirez les mots-clés de l’un d’eux.",
@@ -5972,5 +5972,9 @@
   "fpIgnoreFail": "Impossible d'enregistrer le masquage/rétablissement — réessayez.",
   "rwSaveToHistory": "Enregistrer dans l'historique",
   "rwSavedHistory": "Enregistré",
-  "rwSaveHistHint": "Enregistre cette variante dans l'historique (comme un article) pour survivre à un rechargement."
+  "rwSaveHistHint": "Enregistre cette variante dans l'historique (comme un article) pour survivre à un rechargement.",
+  "gapFreeCost": "Gratuit — s'exécute via SearXNG / votre fournisseur SERP",
+  "gapFreeNote": "Mode gratuit : les positions et URL ci-dessous proviennent de résultats SERP en direct. Volume et KD : N/D — aucun fournisseur de métriques n'est utilisé, rien n'est estimé. Certains mots-clés ont été extraits des pages du concurrent puis vérifiés dans le SERP.",
+  "gapFreeUnavailable": "Chemin gratuit indisponible : ni SearXNG ni clé Serper. Ajoutez une clé de fournisseur de métriques ou configurez SearXNG dans Paramètres → SEO Tools.",
+  "gapFreeSerpFailed": "Échec de la récupération SERP — le moteur de recherche n'a renvoyé aucun résultat."
 }

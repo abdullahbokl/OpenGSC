@@ -11,6 +11,13 @@ import { readUsage, recordUsage, releaseUnusedUnits, withinCap, learnFieldSuppor
 import { runUpsert } from "@/lib/db/upsert";
 import { rawQuery, rawExec } from "@/lib/db/raw";
 import { OWN_YANDEX_ROWS, ownYandexStale, refreshOwnYandex } from "@/lib/seo/yandexOwn";
+import { runSerp } from "@/lib/seo/serp";
+import { searxngConfigured } from "@/lib/seo/searxng";
+import { scrapePage, scrapeMany } from "@/lib/seo/scrape";
+import {
+  aggregateCompetitorsFromSerp, competitorRowsFromQueries,
+  extractKeywordCandidates, seedQueriesFromGsc, type FreeSerpRow, type SeededSerp,
+} from "@/lib/seo/gapFree";
 
 // POST /api/metrics/gap { siteId, action, ... }
 //
@@ -162,17 +169,144 @@ export async function POST(req: Request) {
     return { rows, competitors };
   };
 
-  const respond = async (extra: Record<string, unknown> = {}, status = 200) => {
+  const respond = async (extra: Record<string, unknown> = {}, status = 200, providerName = provider) => {
     const { rows, competitors } = await buildGap();
     return NextResponse.json({
       target: norm(site.url), country, rows, competitors,
-      usage: await readUsage(userId, provider),
+      usage: await readUsage(userId, providerName),
       // So the screen can stop offering — and stop charging for — a column this gateway does not
       // forward. Empty means "nothing known against it", which is the assume-it-works default.
-      unsupported: [...await unsupportedFields(gatewayHost, ORGANIC_ENDPOINT)],
+      unsupported: providerName === "free" ? [] : [...await unsupportedFields(gatewayHost, ORGANIC_ENDPOINT)],
+      ...(providerName === "free" ? { mode: "free" } : {}),
       ...extra,
     }, { status });
   };
+
+  // ── Free path: SERP-observed competitors, no metrics-provider key ──
+  // Provider "free" replaces the paid discovery for installs without Semrush/Keys.so. Same three
+  // actions, same CompetitorKeyword storage, same gap join — but the competitor side is built
+  // from live SERP pulls (SearXNG: keyless and self-hosted; Serper as fallback when the browser
+  // holds a key) over seed queries taken from the site's own GSC history. Positions and coverage
+  // are observed; volume and difficulty are stored null and the UI shows N/A — nothing here may
+  // read as provider data that was never bought. The Yandex market stays Keys.so-only.
+  if (String(b.provider ?? "") === "free" && !yandex && (action === "competitors" || action === "keywords")) {
+    const freeSerpProvider = searxngConfigured() ? "searxng" : "serper";
+    const freeSerpKey = freeSerpProvider === "serper" ? String(b.serpKey ?? "").trim() : "";
+    if (freeSerpProvider === "serper" && !freeSerpKey) {
+      return respond({ error: "free_unavailable" }, 503);
+    }
+    const gl = country; // non-Yandex markets store the raw Google country code
+
+    const toFreeRows = (results: { position: number; url: string; title: string; domain: string }[]) =>
+      results.map(r => ({ position: r.position, url: r.url, title: r.title, domain: r.domain }));
+
+    type FreeSerpOutcome = { error: string; rows: null } | { error: null; rows: FreeSerpRow[] };
+    const runFreeSerp = async (query: string): Promise<FreeSerpOutcome> => {
+      const res = await runSerp(freeSerpProvider, freeSerpKey, query, { gl, num: 20 });
+      if (res.error) return { error: `${query}: ${res.error}`, rows: null };
+      return { error: null, rows: toFreeRows(res.results) };
+    };
+
+    // Seeds: the target's own GSC queries (the same 90-day window the gap join reads). With no
+    // GSC history yet, fall back to what the homepage's own title says the site is about, then
+    // to the bare domain — a fresh site gets one pull instead of a dead end.
+    const freeSeedSerps = async (): Promise<{ seeded: SeededSerp[]; firstError: string }> => {
+      const since = new Date(); since.setDate(since.getDate() - 90);
+      let gsc: { query: string; impressions: number }[] = [];
+      try {
+        const grouped = await prisma.dailyMetric.groupBy({
+          by: ["query"],
+          where: { siteId: site.id, date: { gte: since }, query: { not: "" } },
+          _sum: { impressions: true },
+          orderBy: { _sum: { impressions: "desc" } },
+          take: 40,
+        });
+        gsc = grouped.map(r => ({ query: String(r.query ?? ""), impressions: Number(r._sum.impressions ?? 0) }));
+      } catch { /* no GSC data yet — fallbacks below */ }
+      let seeds = seedQueriesFromGsc(gsc, norm(site.url), 8);
+      if (!seeds.length) {
+        const home = await scrapePage(`https://${norm(site.url)}`);
+        seeds = home.ok ? extractKeywordCandidates({ title: home.title }, 1) : [];
+        if (!seeds.length) {
+          const root = norm(site.url).split(".")[0];
+          if (root.length > 2) seeds = [root];
+        }
+      }
+      const seeded: SeededSerp[] = [];
+      let firstError = "";
+      for (const q of seeds) {
+        const r = await runFreeSerp(q);
+        if (r.error !== null) { if (!firstError) firstError = r.error; continue; }
+        seeded.push({ query: q, rows: r.rows });
+      }
+      return { seeded, firstError };
+    };
+
+    if (action === "competitors") {
+      const limit = Math.max(5, Math.min(50, Number(b.limit ?? 20)));
+      const { seeded, firstError } = await freeSeedSerps();
+      if (!seeded.length) return respond({ error: "free_serp_failed", errorDetail: firstError }, 502);
+      // Coverage across the site's own queries — an observed count, not a provider metric.
+      return respond({ serpProvider: freeSerpProvider, found: aggregateCompetitorsFromSerp(seeded, norm(site.url), limit) });
+    }
+
+    // action === "keywords"
+    const competitor = norm(String(b.competitor ?? ""));
+    if (!competitor.includes(".")) return NextResponse.json({ error: "bad_competitor" }, { status: 400 });
+    if (competitor === norm(site.url)) return NextResponse.json({ error: "self" }, { status: 400 });
+    const maxPosition = Math.max(1, Math.min(50, Number(b.maxPosition ?? 20)));
+
+    const { seeded, firstError } = await freeSeedSerps();
+    if (!seeded.length) return respond({ error: "free_serp_failed", errorDetail: firstError }, 502);
+    const observed = competitorRowsFromQueries(seeded, competitor, maxPosition);
+
+    // The seed SERPs only know queries our GSC already knows — every other keyword the
+    // competitor ranks for is invisible here. Scrape the competitor's own pages (the ones the
+    // SERPs showed, plus home) for the phrases they chose to rank on, then verify each
+    // candidate with one more SERP pull and store only observed rows. Bounded hard — 4 pages,
+    // 6 candidates — so the path stays cheap even when Serper (metered) is the fallback.
+    const scrapeUrls = [...new Set([`https://${competitor}/`, ...observed.map(r => r.url)])].slice(0, 4);
+    const pages = await scrapeMany(scrapeUrls);
+    const candidates = [...new Set(
+      pages.flatMap(p => (p.ok ? extractKeywordCandidates({ title: p.title, headings: p.headings }, 4) : [])),
+    )].slice(0, 6);
+    const scraped: SeededSerp[] = [];
+    for (const q of candidates) {
+      const r = await runFreeSerp(q);
+      if (r.error === null) scraped.push({ query: q, rows: r.rows });
+    }
+    const scrapedRows = competitorRowsFromQueries(scraped, competitor, maxPosition);
+    const rows = [...observed, ...scrapedRows.filter(s => !observed.some(r => r.keyword === s.keyword))];
+
+    if (!rows.length) {
+      return respond({ error: "no_competitor_keywords", competitor, serpProvider: freeSerpProvider }, 200);
+    }
+
+    try {
+      // Replace rather than merge — same contract as the paid path: a query the competitor no
+      // longer holds must disappear from the gap.
+      await rawExec(
+        `DELETE FROM "CompetitorKeyword" WHERE siteId = ? AND competitor = ? AND country = ?`,
+        site.id, competitor, country,
+      );
+      for (const k of rows) {
+        await runUpsert({
+          table: "CompetitorKeyword",
+          conflict: ["siteId", "competitor", "keyword", "country"],
+          values: {
+            siteId: site.id, competitor, keyword: k.keyword, country,
+            position: k.position, volume: null, difficulty: null, url: k.url,
+            source: "serp", fetchedAt: new Date().toISOString(),
+          },
+          update: { position: "set", volume: "set", difficulty: "set", url: "set", fetchedAt: "set" },
+        });
+      }
+    } catch {
+      return respond({ error: "not_migrated" }, 500);
+    }
+
+    return respond({ serpProvider: freeSerpProvider, imported: rows.length, competitor, scrapedKeywords: scrapedRows.length });
+  }
 
   if (action === "read" || !apiKey) {
     return respond(action !== "read" && !apiKey ? { error: "no_key" } : {});

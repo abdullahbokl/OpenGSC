@@ -3158,8 +3158,8 @@
   "gapKeywords": "Keywords",
   "gapPull": "Keywords laden",
   "gapManualPh": "competitor.com",
-  "gapManualHint": "Keine Vorschläge? Gib einen dir bekannten Konkurrenten ein — funktioniert für neue/kleine Seiten, die Ahrefs noch nicht kennt.",
-  "gapNoKey": "Benötigt einen Anbieter-Schlüssel — dieses Modul hat noch keinen Importpfad",
+  "gapManualHint": "Keine Vorschläge? Geben Sie einen bekannten Wettbewerber ein – funktioniert auch für neue/kleine Seiten, die Anbieter noch nicht erfassen.",
+  "gapNoKey": "Kein Metrics-Provider-Schlüssel vorhanden und der kostenlose SERP-Pfad ist nicht verfügbar – SearXNG oder einen Serper-Schlüssel unter Einstellungen → SEO Tools konfigurieren.",
   "gapFailed": "Mitbewerber-Daten konnten nicht geladen werden",
   "gapNotMigrated": "Führe prisma db push aus — die Mitbewerber-Tabellen fehlen",
   "gapEmpty": "Noch nichts geladen. Finde Mitbewerber, dann ziehe die Keywords eines davon.",
@@ -5972,5 +5972,9 @@
   "fpIgnoreFail": "Aus-/Einblenden konnte nicht gespeichert werden – erneut versuchen.",
   "rwSaveToHistory": "Im Verlauf speichern",
   "rwSavedHistory": "Gespeichert",
-  "rwSaveHistHint": "Speichert diese Variante im Verlauf (als Artikel), damit sie einen Reload überlebt."
+  "rwSaveHistHint": "Speichert diese Variante im Verlauf (als Artikel), damit sie einen Reload überlebt.",
+  "gapFreeCost": "Kostenlos – läuft über SearXNG / Ihren SERP-Anbieter",
+  "gapFreeNote": "Kostenloser Modus: Positionen und URLs unten sind Beobachtungen aus Live-SERPs. Volumen und KD: N/V – kein Metrics-Anbieter wird genutzt, nichts wird geschätzt. Einige Keywords wurden von Wettbewerberseiten gescrappt und im SERP verifiziert.",
+  "gapFreeUnavailable": "Kostenloser Pfad nicht verfügbar: weder SearXNG noch Serper-Schlüssel. Fügen Sie einen Metrics-Provider-Schlüssel hinzu oder konfigurieren Sie SearXNG unter Einstellungen → SEO Tools.",
+  "gapFreeSerpFailed": "SERP-Abruf fehlgeschlagen – die Such-Backend lieferte keine Ergebnisse."
 }

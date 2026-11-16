@@ -3158,8 +3158,8 @@
   "gapKeywords": "palabras clave",
   "gapPull": "Cargar palabras clave",
   "gapManualPh": "competitor.com",
-  "gapManualHint": "¿Sin sugerencias? Escribe un competidor conocido — funciona para sitios nuevos/pequeños que Ahrefs aún no mapea.",
-  "gapNoKey": "Necesita una clave de proveedor de métricas: este módulo aún no tiene ruta de importación",
+  "gapManualHint": "¿Sin sugerencias? Escriba un competidor que conozca: funciona también para sitios nuevos/pequeños que los proveedores aún no registran.",
+  "gapNoKey": "Sin clave de proveedor de métricas y la vía SERP gratuita no está disponible: configure SearXNG o una clave de Serper en Ajustes → SEO Tools.",
   "gapFailed": "No se pudieron cargar los datos del competidor",
   "gapNotMigrated": "Ejecuta prisma db push — faltan las tablas de competidores",
   "gapEmpty": "Aún no hay nada cargado. Encuentra competidores, luego extrae las palabras clave de uno de ellos.",
@@ -5972,5 +5972,9 @@
   "fpIgnoreFail": "No se pudo guardar ocultar/mostrar: inténtalo de nuevo.",
   "rwSaveToHistory": "Guardar en el historial",
   "rwSavedHistory": "Guardado",
-  "rwSaveHistHint": "Guarda esta variante en el historial (como artículo) para que sobreviva a una recarga."
+  "rwSaveHistHint": "Guarda esta variante en el historial (como artículo) para que sobreviva a una recarga.",
+  "gapFreeCost": "Gratis — funciona con SearXNG / su proveedor SERP",
+  "gapFreeNote": "Modo gratuito: las posiciones y URL de abajo son observaciones de resultados SERP en vivo. Volumen y KD: N/D — no se usa ningún proveedor de métricas y nada se estima. Algunas palabras clave se extrajeron de páginas del competidor y se verificaron en el SERP.",
+  "gapFreeUnavailable": "Vía gratuita no disponible: sin SearXNG ni clave de Serper. Añada una clave de proveedor de métricas o configure SearXNG en Ajustes → SEO Tools.",
+  "gapFreeSerpFailed": "Fallo al obtener el SERP: el motor de búsqueda no devolvió resultados."
 }
