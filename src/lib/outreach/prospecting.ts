@@ -15,6 +15,22 @@ import { prisma } from "@/lib/prisma";
 import { normalizeProspectDomain } from "./types";
 import { resolveAiCreds } from "@/lib/mcp/shared";
 import { fetchLLMDetailed } from "@/lib/llm";
+import type { AiCreds } from "@/lib/mcp/shared";
+
+// Reasoning models (the Ollama Cloud default spends tokens on hidden reasoning) can return a
+// 200 with NO text when the budget is tight — so the budget is generous, and one length-capped
+// empty answer gets one retry with a far larger budget before the honest failure is reported.
+async function askModel(creds: AiCreds, prompt: string, temperature: number): Promise<{ text: string | null; error?: string }> {
+  const first = await fetchLLMDetailed(prompt, creds.aiProvider, creds.aiApiKey, 6000, creds.model, creds.aiBaseUrl, temperature);
+  if (first.text != null) return first;
+  if (first.error && /token limit|finish_reason: length/i.test(first.error)) {
+    const retry = await fetchLLMDetailed(prompt, creds.aiProvider, creds.aiApiKey, 16000, creds.model, creds.aiBaseUrl, temperature);
+    if (retry.text != null) return retry;
+    return { text: null, error: `${first.error} | retry@16000: ${retry.error ?? "still empty"}` };
+  }
+  return first;
+}
+
 import { searxngSearch } from "@/lib/seo/searxng";
 
 export type DiscoveryPattern = "resource" | "listicle" | "guest_post" | "article";
@@ -206,7 +222,7 @@ export async function discoverProspects(userId: string, input: DiscoveryInput): 
       "",
       'Answer with ONLY a JSON array: [{"url":"...","score":7,"reason":"...","competitor":false}, ...]',
     ].filter(Boolean).join("\n");
-    const detail = await fetchLLMDetailed(prompt, creds.aiProvider, creds.aiApiKey, 2048, creds.model, creds.aiBaseUrl, 0.2);
+    const detail = await askModel(creds, prompt, 0.2);
     qualifications = parseQualification(detail.text, candidates);
     if (!qualifications.some(q => q.reason !== "qualification_unavailable")) {
       out.aiError = detail.error ?? "model answer could not be parsed";

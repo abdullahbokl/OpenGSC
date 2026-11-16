@@ -9,8 +9,7 @@
 // by default) so the operator's configured provider is used, never a hardcoded one.
 
 import { prisma } from "@/lib/prisma";
-import { getUserSettings, resolveAiCreds } from "@/lib/mcp/shared";
-import { fetchLLM } from "@/lib/llm";
+import { getUserSettings, resolveAiCreds, type AiCreds } from "@/lib/mcp/shared";
 import { scrapePage } from "@/lib/seo/scrape";
 import { normalizeProspectDomain } from "./types";
 
@@ -107,6 +106,20 @@ export interface GeneratedDrafts {
  *  page content (fetched live), so "why you" claims cite the real page; when the page cannot
  *  be read the prompt says so and the model is instructed to keep claims generic rather than
  *  invent page details. */
+// Same reasoning-budget note as prospecting.askModel: a hidden-reasoning model returns a
+// 200 with no text on a tight budget, so generous first pass + one big-budget retry.
+async function askModel(creds: AiCreds, prompt: string, temperature: number): Promise<{ text: string | null; error?: string }> {
+  const { fetchLLMDetailed } = await import("@/lib/llm");
+  const first = await fetchLLMDetailed(prompt, creds.aiProvider, creds.aiApiKey, 6000, creds.model, creds.aiBaseUrl, temperature);
+  if (first.text != null) return first;
+  if (first.error && /token limit|finish_reason: length/i.test(first.error)) {
+    const retry = await fetchLLMDetailed(prompt, creds.aiProvider, creds.aiApiKey, 16000, creds.model, creds.aiBaseUrl, temperature);
+    if (retry.text != null) return retry;
+    return { text: null, error: `${first.error} | retry@16000: ${retry.error ?? "still empty"}` };
+  }
+  return first;
+}
+
 export async function generateDrafts(userId: string, prospectId: string): Promise<GeneratedDrafts> {
   const prospect = await prisma.outreachProspect.findFirst({ where: { id: prospectId, userId } });
   if (!prospect) throw new Error("prospect_not_found");
@@ -147,9 +160,9 @@ export async function generateDrafts(userId: string, prospectId: string): Promis
     'Return ONLY a JSON object: {"initial":{"subject":"...","body":"...","rationale":"why this angle"},"followups":[{"subject":"...","body":"...","rationale":"..."},...] with at most 2 follow-ups}',
   ].filter(Boolean).join("\n");
 
-  const raw = await fetchLLM(prompt, creds.aiProvider, creds.aiApiKey, 2048, creds.model, creds.aiBaseUrl, 0.4);
-  const parsed = parseDrafts(raw);
-  if (!parsed) throw new Error("draft_generation_failed");
+  const result = await askModel(creds, prompt, 0.4);
+  const parsed = parseDrafts(result.text);
+  if (!parsed) throw new Error(result.error ? `draft_generation_failed: ${result.error}` : "draft_generation_failed");
 
   const rows: { kind: DraftKind; content: DraftContent }[] = [
     { kind: "initial", content: parsed.initial },
