@@ -29,7 +29,7 @@ interface AhrefsBacklinkRow {
   is_dofollow?: unknown;
 }
 
-async function fetchBrandLinks(ahrefsKey: string, baseUrl: string, brand: string, sinceIso: string, minDr: number, limit: number): Promise<{ rows?: AhrefsBacklinkRow[]; error?: string }> {
+async function fetchBrandLinks(ahrefsKey: string, baseUrl: string, brand: string, sinceIso: string, minDr: number, limit: number): Promise<{ rows?: AhrefsBacklinkRow[]; error?: string; fatal?: boolean }> {
   const params = new URLSearchParams({
     target: brand,
     mode: "subdomains",
@@ -60,9 +60,15 @@ async function fetchBrandLinks(ahrefsKey: string, baseUrl: string, brand: string
       signal: AbortSignal.timeout(30_000),
     }, { provider: "ahrefs" });
     if (!res.ok) {
-      const error = `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)}`;
+      // 401/403 are key-wide: the same key is about to fail against every other brand too, so the
+      // caller must abort the run instead of burning one doomed request per watched brand — and
+      // the message must say where to fix it, not just echo the gateway body.
+      const fatal = res.status === 401 || res.status === 403;
+      const error = fatal
+        ? `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)} — the Ahrefs API key was rejected by ${base}. Update the key in Settings → Providers (Metrics), then run again. No links were saved.`
+        : `ahrefs ${res.status}: ${(await res.text()).slice(0, 300)}`;
       call.finish({ error });
-      return { error };
+      return { error, fatal };
     }
     const d = await res.json();
     call.finish();
@@ -91,10 +97,19 @@ export async function POST(req: Request) {
 
   const errors: Record<string, string> = {};
   let saved = 0;
+  let brandsRun = 0;
+  let fatal = false;
   // Sequential: Ahrefs rate limits are per-minute; this endpoint runs as a user action.
   for (const { domain: brand } of brands.slice(0, 200)) {
     const r = await fetchBrandLinks(ahrefsKey, baseUrl, brand, since, minDr, limit);
-    if (r.error) { errors[brand] = r.error; continue; }
+    brandsRun++;
+    if (r.error) {
+      errors[brand] = r.error;
+      // An auth rejection never heals mid-run: stop here and report it as the failure it is,
+      // rather than a green "done with errors" line over nine identical failures.
+      if (r.fatal) { fatal = true; break; }
+      continue;
+    }
     try {
       await rawExec(`DELETE FROM "LinkMention" WHERE userId = ? AND brand = ?`, userId, brand);
       for (const row of r.rows || []) {
@@ -111,5 +126,6 @@ export async function POST(req: Request) {
       }
     } catch (e) { errors[brand] = String((e as Error)?.message ?? e); }
   }
+  if (fatal) return NextResponse.json({ ok: false, fatal: "ahrefs_auth", saved, brandsChecked: brandsRun, errors }, { status: 401 });
   return NextResponse.json({ ok: true, saved, brandsChecked: brands.length, errors });
 }
