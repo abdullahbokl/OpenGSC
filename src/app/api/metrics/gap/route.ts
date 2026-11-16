@@ -190,10 +190,13 @@ export async function POST(req: Request) {
   // are observed; volume and difficulty are stored null and the UI shows N/A — nothing here may
   // read as provider data that was never bought. The Yandex market stays Keys.so-only.
   if (String(b.provider ?? "") === "free" && !yandex && (action === "competitors" || action === "keywords")) {
+    // Free-mode responses must say so: respond()'s providerName defaults to the parsed metrics
+    // provider, and "free" never parses into one — the UI's provenance note keys off this flag.
+    const respondFree = (extra: Record<string, unknown> = {}, status = 200) => respond(extra, status, "free");
     const freeSerpProvider = searxngConfigured() ? "searxng" : "serper";
     const freeSerpKey = freeSerpProvider === "serper" ? String(b.serpKey ?? "").trim() : "";
     if (freeSerpProvider === "serper" && !freeSerpKey) {
-      return respond({ error: "free_unavailable" }, 503);
+      return respondFree({ error: "free_unavailable" }, 503);
     }
     const gl = country; // non-Yandex markets store the raw Google country code
 
@@ -245,9 +248,9 @@ export async function POST(req: Request) {
     if (action === "competitors") {
       const limit = Math.max(5, Math.min(50, Number(b.limit ?? 20)));
       const { seeded, firstError } = await freeSeedSerps();
-      if (!seeded.length) return respond({ error: "free_serp_failed", errorDetail: firstError }, 502);
+      if (!seeded.length) return respondFree({ error: "free_serp_failed", errorDetail: firstError }, 502);
       // Coverage across the site's own queries — an observed count, not a provider metric.
-      return respond({ serpProvider: freeSerpProvider, found: aggregateCompetitorsFromSerp(seeded, norm(site.url), limit) });
+      return respondFree({ serpProvider: freeSerpProvider, found: aggregateCompetitorsFromSerp(seeded, norm(site.url), limit) });
     }
 
     // action === "keywords"
@@ -257,7 +260,7 @@ export async function POST(req: Request) {
     const maxPosition = Math.max(1, Math.min(50, Number(b.maxPosition ?? 20)));
 
     const { seeded, firstError } = await freeSeedSerps();
-    if (!seeded.length) return respond({ error: "free_serp_failed", errorDetail: firstError }, 502);
+    if (!seeded.length) return respondFree({ error: "free_serp_failed", errorDetail: firstError }, 502);
     const observed = competitorRowsFromQueries(seeded, competitor, maxPosition);
 
     // The seed SERPs only know queries our GSC already knows — every other keyword the
@@ -279,7 +282,7 @@ export async function POST(req: Request) {
     const rows = [...observed, ...scrapedRows.filter(s => !observed.some(r => r.keyword === s.keyword))];
 
     if (!rows.length) {
-      return respond({ error: "no_competitor_keywords", competitor, serpProvider: freeSerpProvider }, 200);
+      return respondFree({ error: "no_competitor_keywords", competitor, serpProvider: freeSerpProvider }, 200);
     }
 
     try {
@@ -302,10 +305,10 @@ export async function POST(req: Request) {
         });
       }
     } catch {
-      return respond({ error: "not_migrated" }, 500);
+      return respondFree({ error: "not_migrated" }, 500);
     }
 
-    return respond({ serpProvider: freeSerpProvider, imported: rows.length, competitor, scrapedKeywords: scrapedRows.length });
+    return respondFree({ serpProvider: freeSerpProvider, imported: rows.length, competitor, scrapedKeywords: scrapedRows.length });
   }
 
   if (action === "read" || !apiKey) {
