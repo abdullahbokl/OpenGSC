@@ -38,6 +38,12 @@ const EXACT_KEYS = [
   // sweep after an import, MCP enrich_dr) resolves its key from this mirror — leaving it out
   // meant the browser's working key never reached the server and drops DR 401'd forever while
   // the dashboard (which sends the browser's key in a header) kept working.
+  // The Link Tracker card's admin email. Its siblings travel by prefix (`seoKey_linktracker`,
+  // `seoBaseUrl_linktracker`) but this name matches neither — and because PUT replaces the
+  // whole mirror with the browser snapshot, leaving it out meant every browser push ERASED
+  // the server-side copy (the card's "configured" check needs email AND password, so it
+  // showed "Not set" even with the credentials saved server-side).
+  "seoLinkTrackerEmail",
 ];
 // `seoMetrics` covers the whole metrics layer: mode, base URL, monthly cap, active provider.
 //
