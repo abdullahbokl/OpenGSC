@@ -986,9 +986,18 @@ function LinkTrackerCard() {
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    setBaseUrl(localStorage.getItem("seoBaseUrl_linktracker") || "");
-    setEmail(localStorage.getItem("seoLinkTrackerEmail") || "");
-    setPassword(localStorage.getItem("seoKey_linktracker") || "");
+    // Re-read on the sync-restore event too: pullAndRestore writes localStorage a moment AFTER
+    // this card mounts (it fetches /api/settings/seo-sync asynchronously), so a first load on a
+    // fresh browser would otherwise show restored keys as empty until a full remount — the same
+    // pattern AiModelBadge / DashboardShell already follow.
+    const reread = () => {
+      setBaseUrl(localStorage.getItem("seoBaseUrl_linktracker") || "");
+      setEmail(localStorage.getItem("seoLinkTrackerEmail") || "");
+      setPassword(localStorage.getItem("seoKey_linktracker") || "");
+    };
+    reread();
+    window.addEventListener("seo-keys-restored", reread);
+    return () => window.removeEventListener("seo-keys-restored", reread);
   }, []);
 
   const persist = () => {
