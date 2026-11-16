@@ -4,6 +4,7 @@
 
 import { EditorialPolicy, DEFAULT_POLICY, normalizePolicy } from "./policy";
 import { DEFAULT_AI_PROVIDER, defaultModelFor, isOllamaCloud, ollamaChatModel, ollamaEndpoint } from "../providerDefaults";
+import { pickSerpProvider } from "./serpReadiness";
 
 export function getAiCreds(): { provider: string; apiKey: string } {
   if (typeof window === "undefined") return { provider: DEFAULT_AI_PROVIDER, apiKey: "" };
@@ -246,9 +247,24 @@ export function getSeoGenCreds(): { provider: string; apiKey: string; model: str
   return { provider, apiKey, model, baseUrl };
 }
 
+/**
+ * The provider to use when the user has never picked one.
+ *
+ * Hard-coding "serper" here was the reason a fully connected keyless SearXNG still left every
+ * page reporting "no SERP provider key": the browser had no `seoSerpProvider`, so it fell back to
+ * Serper and looked for a Serper key that was never configured. The default is now derived from
+ * what is actually configured, and only falls through to SearXNG when no commercial key exists.
+ *
+ * An explicit `seoSerpProvider` always wins, so choosing Serper/DataForSEO is never overridden.
+ */
+export function defaultSerpProvider(): string {
+  if (typeof window === "undefined") return "serper";
+  return pickSerpProvider("", (provider) => !!localStorage.getItem(`seoKey_${provider}`));
+}
+
 export function getSerpCreds(): { provider: string; apiKey: string; baseUrl?: string } {
   if (typeof window === "undefined") return { provider: "serper", apiKey: "" };
-  const provider = localStorage.getItem("seoSerpProvider") || "serper";
+  const provider = localStorage.getItem("seoSerpProvider") || defaultSerpProvider();
   const apiKey = localStorage.getItem(`seoKey_${provider}`) || "";
   // Only self-hosted providers have one; for the metered ones the host is a constant in the
   // provider module and this stays undefined.

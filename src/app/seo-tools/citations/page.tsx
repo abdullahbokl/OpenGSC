@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Quote, Loader2, AlertTriangle, Search, ExternalLink } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
-import { getDataForSeoKey } from "@/lib/seo/keys";
+import { getDataForSeoKey, getSerpCreds } from "@/lib/seo/keys";
+import { useSerpReadiness } from "@/lib/seo/useSerpReadiness";
 import { EMOTIONS, type Citation } from "@/lib/seo/contentAnalysisShapes";
 
 const card = "panel";
@@ -16,23 +17,39 @@ export default function CitationsPage() {
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [data, setData] = useState<{ total: number; items: Citation[] } | null>(null);
-  const hasKey = typeof window !== "undefined" && !!getDataForSeoKey();
+  const [data, setData] = useState<{ total: number; items: Citation[]; sentimentAvailable?: boolean; source?: string } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const dfsKey = mounted ? getDataForSeoKey() : "";
+  const serpCreds = mounted ? getSerpCreds() : { provider: "", apiKey: "" };
+  const serpReady = useSerpReadiness(serpCreds);
+  const canSearch = !!dfsKey || serpReady;
 
   async function run() {
     setErr(""); setData(null);
     const dfsKey = getDataForSeoKey();
-    if (!dfsKey) { setErr(t("seoCitNeedKey")); return; }
+    if (!dfsKey && !serpReady) { setErr(t("seoCitNeedProvider")); return; }
     if (!keyword.trim()) return;
     setLoading(true);
     try {
       const res = await fetch("/api/seo/content-analysis", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword, dfsKey, limit: 200 }),
+        body: JSON.stringify({
+          keyword,
+          dfsKey,
+          provider: dfsKey ? "dataforseo" : "searxng",
+          hl: typeof navigator !== "undefined" ? navigator.language.split("-")[0] : undefined,
+          limit: 200,
+        }),
       });
       const d = await res.json();
       if (!res.ok) { setErr(d.error || "error"); setLoading(false); return; }
-      setData({ total: d.total ?? (d.items?.length || 0), items: d.items || [] });
+      setData({
+        total: d.total ?? (d.items?.length || 0),
+        items: d.items || [],
+        sentimentAvailable: d.sentimentAvailable !== false,
+        source: d.source,
+      });
     } catch (e) { setErr(String((e as Error)?.message ?? e)); }
     setLoading(false);
   }
@@ -63,9 +80,9 @@ export default function CitationsPage() {
         <p style={{ fontSize: "13px", color: "var(--color-text-secondary)", margin: 0 }}>{t("seoCitSub")}</p>
       </div>
 
-      {!hasKey && (
-        <div className={card} style={{ borderColor: "rgba(255,159,10,0.35)", background: "rgba(255,159,10,0.06)", display: "flex", gap: "10px", alignItems: "center", fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          <AlertTriangle size={18} color="var(--color-accent-orange)" /> {t("seoCitNeedKey")} <Link href="/settings?tab=serp" style={{ color: "var(--color-accent-blue)" }}>{t("seoSettingsShort")}</Link>
+      {mounted && !dfsKey && (
+        <div className={card} style={{ borderColor: canSearch ? "rgba(41,151,255,0.35)" : "rgba(255,159,10,0.35)", background: canSearch ? "rgba(41,151,255,0.06)" : "rgba(255,159,10,0.06)", display: "flex", gap: "10px", alignItems: "center", fontSize: "13px", color: "var(--color-text-secondary)" }}>
+          <AlertTriangle size={18} color={canSearch ? "var(--color-accent-blue)" : "var(--color-accent-orange)"} /> {canSearch ? t("seoCitSerpOnly") : t("seoCitNeedProvider")} <Link href="/settings?tab=serp" style={{ color: "var(--color-accent-blue)" }}>{t("seoSettingsShort")}</Link>
         </div>
       )}
 
@@ -84,29 +101,43 @@ export default function CitationsPage() {
         <div className={card} style={{ textAlign: "center", color: "var(--color-text-secondary)", fontSize: "13px" }}>{t("seoCitEmpty")}</div>
       ) : (
         <>
-          {/* summary cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr", gap: "12px" }}>
-            <Stat big label={t("seoCitTotal")} value={(data.total || agg.n).toLocaleString()} sub={`${agg.n} ${t("seoCitShown")}`} color="var(--color-text-primary)" />
-            <Stat label={t("seoCitPositive")} value={String(agg.pol.positive)} color={POL.positive} />
-            <Stat label={t("seoCitNeutral")} value={String(agg.pol.neutral)} color={POL.neutral} />
-            <Stat label={t("seoCitNegative")} value={String(agg.pol.negative)} color={POL.negative} />
-          </div>
+          {/* summary cards — sentiment only when the provider can actually supply it */}
+          {data.sentimentAvailable === false ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "12px" }}>
+                <Stat big label={t("seoCitTotal")} value={(data.total || agg.n).toLocaleString()} sub={`${agg.n} ${t("seoCitShown")}`} color="var(--color-text-primary)" />
+                <Stat label={t("seoCitTopDomains")} value={String(agg.topDomains.length)} color="var(--color-accent-purple)" />
+              </div>
+              <div className={card} style={{ borderColor: "rgba(255,159,10,0.35)", background: "rgba(255,159,10,0.06)", fontSize: "13px", color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                <AlertTriangle size={16} color="var(--color-accent-orange)" /> {t("seoCitSentimentUnavailable")}
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr", gap: "12px" }}>
+              <Stat big label={t("seoCitTotal")} value={(data.total || agg.n).toLocaleString()} sub={`${agg.n} ${t("seoCitShown")}`} color="var(--color-text-primary)" />
+              <Stat label={t("seoCitPositive")} value={String(agg.pol.positive)} color={POL.positive} />
+              <Stat label={t("seoCitNeutral")} value={String(agg.pol.neutral)} color={POL.neutral} />
+              <Stat label={t("seoCitNegative")} value={String(agg.pol.negative)} color={POL.negative} />
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "start" }}>
-            {/* emotions */}
-            <div className={card}>
-              <div className="tool-section-label" style={{ marginBottom: "12px" }}>{t("seoCitEmotions")}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {EMOTIONS.map(e => (
-                  <div key={e} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <span style={{ fontSize: "12px", color: "var(--color-text-secondary)", width: "80px", flexShrink: 0 }}>{t(EM_KEY[e] as Parameters<typeof t>[0])}</span>
-                    <div style={{ flex: 1, height: "8px", borderRadius: "4px", background: "var(--color-bg)", overflow: "hidden" }}>
-                      <div style={{ width: `${(agg.emo[e] / agg.emoMax) * 100}%`, height: "100%", background: "var(--color-accent-purple)" }} />
+            {/* emotions — DataForSEO only */}
+            {data.sentimentAvailable !== false && (
+              <div className={card}>
+                <div className="tool-section-label" style={{ marginBottom: "12px" }}>{t("seoCitEmotions")}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {EMOTIONS.map(e => (
+                    <div key={e} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "12px", color: "var(--color-text-secondary)", width: "80px", flexShrink: 0 }}>{t(EM_KEY[e] as Parameters<typeof t>[0])}</span>
+                      <div style={{ flex: 1, height: "8px", borderRadius: "4px", background: "var(--color-bg)", overflow: "hidden" }}>
+                        <div style={{ width: `${(agg.emo[e] / agg.emoMax) * 100}%`, height: "100%", background: "var(--color-accent-purple)" }} />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* trend */}
             <div className={card}>

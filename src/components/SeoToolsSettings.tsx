@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, CheckCircle, Eye, X, Sparkles } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
-import { getConfiguredProviders, AI_PROVIDER_NAMES } from "@/lib/seo/keys";
+import { getConfiguredProviders, AI_PROVIDER_NAMES, defaultSerpProvider } from "@/lib/seo/keys";
 import { rankModels, type ModelOpt } from "@/lib/seo/models";
 import { AI_TASKS, pathsForTask } from "@/lib/seo/aiTasks";
 import { RANK_PROVIDER_LIST } from "@/lib/seo/rankProviders";
@@ -1032,7 +1032,7 @@ export function SerpProviderPicker() {
   // Second provider for checks the first could not answer (captcha, 503, "try again later").
   const [rankFallback, setRankFallback] = useState("");
   useEffect(() => {
-    setActive(localStorage.getItem("seoSerpProvider") || "serper");
+    setActive(defaultSerpProvider());
     setRankActive(localStorage.getItem("seoSerpProvider_rank") || "");
     setRankFallback(localStorage.getItem("seoSerpProvider_rankFallback") || "");
   }, []);

@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { rawQuery } from "@/lib/db/raw";
 import { normalizePolicy, type EditorialPolicy } from "@/lib/seo/policy";
 import { DEFAULT_AI_PROVIDER, isOllamaCloud } from "@/lib/providerDefaults";
+import { pickSerpProvider } from "@/lib/seo/serpReadiness";
 import type { Capability } from "@/lib/team/roles";
 
 export type Json = Record<string, unknown>;
@@ -331,7 +332,10 @@ export interface SerpCreds {
  */
 export async function resolveSerpCreds(userId: string, args: Json = {}): Promise<SerpCreds> {
   const s = await getUserSettings(userId);
-  const provider = String(args.serpProvider ?? s.seoSerpProvider ?? "serper");
+  const provider = String(
+    args.serpProvider
+      ?? pickSerpProvider(s.seoSerpProvider, (id) => !!String(s[`seoKey_${id}`] ?? "").trim()),
+  );
   const key = String(args.serpKey ?? s[`seoKey_${provider}`] ?? "");
   // Mirrored by the same prefix rule as the key (SeoKeysSync), so a server-side job learns the
   // host without the browser having to send it — which is the whole reason it is mirrored.

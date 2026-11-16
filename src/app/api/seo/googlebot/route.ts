@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { classifyInspectionFailure, inspectionSiteUrl } from "@/lib/gsc/inspection";
 import { workspaceUserId } from "@/lib/team/workspace";
 import { prisma } from "@/lib/prisma";
 import { analyzeUrl } from "@/lib/seo/googlebot";
@@ -39,7 +40,7 @@ async function inspectOwnSite(userId: string, inspectUrl: string) {
     where: { userId, provider: "google" },
     select: { id: true, access_token: true, refresh_token: true, expires_at: true },
   });
-  if (!account?.access_token) return { ownSite: { id: match.id, url: match.url }, gsc: null };
+  if (!account?.access_token) return { ownSite: { id: match.id, url: match.url }, gsc: null, gscError: "no_account" };
 
   // Refresh if expired
   let accessToken = account.access_token;
@@ -67,9 +68,9 @@ async function inspectOwnSite(userId: string, inspectUrl: string) {
     } catch {}
   }
 
-  // URL Inspection API doesn't support sc-domain: — convert to url-prefix form
-  let siteUrl = match.siteId;
-  if (siteUrl.startsWith("sc-domain:")) siteUrl = "https://" + siteUrl.slice("sc-domain:".length) + "/";
+  // The API accepts a domain property exactly as Search Console reports it. Rewriting
+  // `sc-domain:` to a URL-prefix made Google answer 403 for every domain property.
+  const siteUrl = inspectionSiteUrl(match.siteId);
 
   // Quota ledger (wave-oct): this single inspection draws on the same 2,000/day property pool
   // as the Indexing button, the auto queue and MCP inspect_url. On a spent day the GSC block
@@ -77,7 +78,7 @@ async function inspectOwnSite(userId: string, inspectUrl: string) {
   // (table missing before db push) must not break the route either.
   try {
     const quota = await quotaToday(match.siteId);
-    if (quota.exhausted) return { ownSite: { id: match.id, url: match.url }, gsc: null };
+    if (quota.exhausted) return { ownSite: { id: match.id, url: match.url }, gsc: null, gscError: "quota_exhausted" };
   } catch { /* ledger unavailable */ }
 
   try {
@@ -93,12 +94,13 @@ async function inspectOwnSite(userId: string, inspectUrl: string) {
       } else {
         await recordInspections(match.siteId, 1, { auto: false }).catch(() => {}); // answered, quota spent
       }
-      return { ownSite: { id: match.id, url: match.url }, gsc: null };
+      const failure = classifyInspectionFailure(res.status);
+      return { ownSite: { id: match.id, url: match.url }, gsc: null, gscError: failure };
     }
     await recordInspections(match.siteId, 1, { auto: false }).catch(() => {});
     const data = await res.json();
     const idx = data?.inspectionResult?.indexStatusResult;
-    if (!idx) return { ownSite: { id: match.id, url: match.url }, gsc: null };
+    if (!idx) return { ownSite: { id: match.id, url: match.url }, gsc: null, gscError: "no_data" };
     return {
       ownSite: { id: match.id, url: match.url },
       gsc: {
@@ -114,7 +116,7 @@ async function inspectOwnSite(userId: string, inspectUrl: string) {
       },
     };
   } catch {
-    return { ownSite: { id: match.id, url: match.url }, gsc: null };
+    return { ownSite: { id: match.id, url: match.url }, gsc: null, gscError: "api_error" };
   }
 }
 
@@ -136,7 +138,7 @@ export async function POST(req: Request) {
     firecrawlKey: typeof body.firecrawlKey === "string" ? body.firecrawlKey : undefined,
     wayback: !!body.wayback,
   });
-  const { ownSite, gsc } = await inspectOwnSite(userId, url).catch(() => ({ ownSite: null, gsc: null }));
+  const { ownSite, gsc, gscError } = await inspectOwnSite(userId, url).catch(() => ({ ownSite: null, gsc: null, gscError: "api_error" }));
 
-  return NextResponse.json({ ...result, ownSite, gsc });
+  return NextResponse.json({ ...result, ownSite, gsc, gscError });
 }

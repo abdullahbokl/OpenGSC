@@ -9,6 +9,25 @@
 
 export const SEARXNG_PROVIDER_ID = "searxng";
 
+/** Providers that carry an app-wide SERP key, in the order the old default tried them. */
+export const APP_WIDE_SERP_PROVIDER_IDS = ["serper", "dataforseo", "scrapingrobot", "goanyapi"] as const;
+
+/**
+ * Resolve the effective SERP provider from a stored choice plus which keys exist.
+ *
+ * Shared by browser and server so "no provider selected" cannot mean Serper in one place and
+ * something else in another. An explicit choice always wins; otherwise the first configured
+ * commercial provider keeps its old behaviour, and a keyless install falls through to SearXNG.
+ */
+export function pickSerpProvider(stored: unknown, hasKey: (provider: string) => boolean): string {
+  const chosen = String(stored ?? "").trim();
+  if (chosen) return chosen;
+  for (const provider of APP_WIDE_SERP_PROVIDER_IDS) {
+    if (hasKey(provider)) return provider;
+  }
+  return SEARXNG_PROVIDER_ID;
+}
+
 /** True when the provider needs an API key in addition to (or instead of) a host. */
 export function serpProviderNeedsKey(provider: string): boolean {
   return provider !== SEARXNG_PROVIDER_ID;

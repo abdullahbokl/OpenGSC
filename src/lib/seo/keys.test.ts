@@ -266,6 +266,17 @@ test("isOllamaCloud distinguishes Cloud from a self-hosted daemon", () => {
   assert.equal(isOllamaCloud("https://ollama.example.com/v1"), false);
 });
 
+test("with no commercial key and no stored choice, the default SERP is SearXNG", () => {
+  assert.equal(getSerpCreds().provider, "searxng");
+  assert.equal(getSerpCreds().apiKey, "");
+});
+
+test("a configured commercial key keeps its provider as the default", () => {
+  shim.setItem("seoKey_dataforseo", "login:pass");
+  assert.equal(getSerpCreds().provider, "dataforseo");
+  assert.equal(getSerpCreds().apiKey, "login:pass");
+});
+
 test("SERP creds untouched (same scope, unaffected by the AI work)", () => {
   shim.setItem("seoSerpProvider", "serper");
   shim.setItem("seoKey_serper", "sp-x");

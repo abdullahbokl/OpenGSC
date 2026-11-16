@@ -25,7 +25,7 @@ type DiffPair = { a: string; b: string; kind: "baseline" | "cross" | "device"; s
 type Matrix = { pairs: DiffPair[]; noiseFloor: number; crossDelta: number; confidence: "high" | "medium" | "low" };
 type Gsc = { verdict?: string | null; coverageState?: string | null; indexingState?: string | null; robotsTxtState?: string | null; pageFetchState?: string | null; crawledAs?: string | null; googleCanonical?: string | null; userCanonical?: string | null; lastCrawlTime?: string | null };
 type AntiBot = { blocked: boolean; provider?: string; bypassed: boolean };
-type Result = { url: string; views: View[]; diff: Diff; matrix?: Matrix | null; ownSite?: { id: string; url: string } | null; gsc?: Gsc | null; wayback?: { available: boolean; url?: string; timestamp?: string } | null; antiBot?: AntiBot | null };
+type Result = { url: string; views: View[]; diff: Diff; matrix?: Matrix | null; ownSite?: { id: string; url: string } | null; gsc?: Gsc | null; gscError?: string | null; wayback?: { available: boolean; url?: string; timestamp?: string } | null; antiBot?: AntiBot | null };
 
 const CONF_KEY = { high: "gbvConfHigh", medium: "gbvConfMedium", low: "gbvConfLow" } as const;
 
@@ -40,6 +40,16 @@ const UA_LABEL: Record<string, string> = {
 };
 
 function hostOfSafe(u?: string): string { try { return u ? new URL(u).host.toLowerCase() : ""; } catch { return ""; } }
+
+function gscReasonKey(code?: string | null): "gbvGscUnavailable" | "gbvGscForbidden" | "gbvGscQuota" | "gbvGscAuth" | "gbvGscError" {
+  switch (code) {
+    case "no_account": return "gbvGscUnavailable";
+    case "property_forbidden": return "gbvGscForbidden";
+    case "quota_exhausted": return "gbvGscQuota";
+    case "auth_expired": return "gbvGscAuth";
+    default: return "gbvGscError";
+  }
+}
 
 export default function GooglebotViewPage() {
   const { t } = useLanguage();
@@ -598,7 +608,7 @@ export default function GooglebotViewPage() {
                 </div>
               ) : (
                 <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <CheckCircle2 size={14} color="#4285F4" /> {t("gbvGscUnavailable")} <Link href="/settings" style={{ color: "var(--color-accent-blue)" }}>{t("gbvGscConnect")}</Link>
+                  <CheckCircle2 size={14} color="#4285F4" /> {t(gscReasonKey(res.gscError))} <Link href="/settings" style={{ color: "var(--color-accent-blue)" }}>{t("gbvGscConnect")}</Link>
                 </div>
               )}
             </div>

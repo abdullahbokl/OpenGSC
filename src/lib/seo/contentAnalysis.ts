@@ -4,12 +4,13 @@
 // Docs: https://docs.dataforseo.com/v3/content_analysis/search/live/
 
 import { loggedFetch, type CallHandle } from "@/lib/providerLog/log";
+import { runSerp, type SerpResultItem } from "./serp";
 
 // The shapes and the emotion list live next door because the Citations page needs them in the
 // browser, and this module — since its DataForSEO call became a logged one — reaches the Prisma
 // client. Re-exported here so every existing server-side import is unchanged.
 export * from "./contentAnalysisShapes";
-import { EMOTIONS, type Citation, type Emotion, type Polarity } from "./contentAnalysisShapes";
+import { citationsFromMentions, EMOTIONS, type Citation, type Emotion, type Polarity } from "./contentAnalysisShapes";
 
 function dfsAuth(cred: string): string {
   const c = (cred || "").trim();
@@ -46,7 +47,7 @@ export async function runContentSearch(
   credential: string,
   keyword: string,
   opts: { limit?: number } = {},
-): Promise<{ total: number; items: Citation[]; error?: string }> {
+): Promise<{ total: number; items: Citation[]; error?: string; sentimentAvailable?: boolean; source?: "dataforseo" | "searxng" }> {
   if (!credential || !keyword) return { total: 0, items: [], error: "missing" };
   const body = [{
     keyword,
@@ -110,5 +111,32 @@ export async function runContentSearch(
     };
   }).filter((c: Citation) => c.url);
 
-  return { total, items };
+  return { total, items, sentimentAvailable: true, source: "dataforseo" as const };
+}
+
+/**
+ * Map plain web results to the citation shape. Pure: a SearXNG answer has URLs, titles and
+ * snippets, but no DataForSEO sentiment/emotion counts, so those are marked unavailable rather
+ * than filled with zeros that would read as "measured neutral".
+ */
+export function mapSearxngCitations(results: SerpResultItem[]): Citation[] {
+  return citationsFromMentions(results);
+}
+
+/** Brand/keyword citations from the self-hosted SearXNG instance (mentions only). */
+export async function runSearxngContentSearch(
+  keyword: string,
+  opts: { limit?: number; gl?: string; hl?: string } = {},
+): Promise<{ total: number; items: Citation[]; error?: string; sentimentAvailable: false; source: "searxng" }> {
+  if (!keyword.trim()) return { total: 0, items: [], error: "missing", sentimentAvailable: false, source: "searxng" };
+  const limit = Math.max(10, Math.min(50, Number(opts.limit) || 50));
+  const serp = await runSerp("searxng", "", keyword.trim(), {
+    num: limit,
+    engine: "google",
+    ...(opts.gl ? { gl: opts.gl } : {}),
+    ...(opts.hl ? { hl: opts.hl } : {}),
+  });
+  if (serp.error) return { total: 0, items: [], error: serp.error, sentimentAvailable: false, source: "searxng" };
+  const items = mapSearxngCitations(serp.results).slice(0, limit);
+  return { total: items.length, items, sentimentAvailable: false, source: "searxng" };
 }
