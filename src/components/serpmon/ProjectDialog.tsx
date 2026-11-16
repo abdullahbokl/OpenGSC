@@ -40,7 +40,10 @@ export default function ProjectDialog({ project, onClose, onSaved }: {
   const [country, setCountry] = useState(project?.country ?? "");
   const [lang, setLang] = useState(project?.lang ?? "");
   const [countryQ, setCountryQ] = useState("");
-  const [depth, setDepth] = useState<number>(project?.depth ?? (aparserLocal ? 100 : Math.min(100, SEARXNG_MAX_RESULTS)));
+  // SearXNG's engines realistically serve ~10 organic rows per pull on this class of instance
+  // (bing page 1; deep pages come back empty) — depth 10 is the honest default there, while
+  // 20/50 stay selectable with the snapshot honestly marked partial when fewer rows arrive.
+  const [depth, setDepth] = useState<number>(project?.depth ?? (aparserLocal ? 100 : 10));
   const [intervalHours, setIntervalHours] = useState<number>(project?.intervalHours ?? 24);
   // Create-only: the raw import text. Edit mode sends keywords through the two explicit
   // buttons below instead.
