@@ -4,6 +4,9 @@ import {
   listOutreach,
   updateOutreachProspect,
 } from "@/lib/outreach/service";
+import { discoverProspects, isDiscoveryPattern } from "@/lib/outreach/prospecting";
+import { findContact } from "@/lib/outreach/contact";
+import { generateDrafts, listDrafts } from "@/lib/outreach/drafts";
 import { OUTREACH_STAGES } from "@/lib/outreach/types";
 import { lim, type McpTool } from "./shared";
 
@@ -111,5 +114,96 @@ export const OUTREACH_TOOLS: McpTool[] = [
       required: ["name"],
     },
     handler: async (userId, args) => ({ campaign: await createOutreachCampaign(userId, args) }),
+  },
+  {
+    name: "discover_prospects",
+    cost: "net",
+    readOnly: false,
+    idempotent: false,
+    description:
+      "Find NEW outreach prospects for a keyword: SearXNG (self-hosted, free) searches resource/list/guest-post/article patterns, the operator's configured AI provider scores each candidate's plausibility with a cited reason, and survivors are saved into the Outreach Workspace with their scores. Scores are the AI's opinion, never a measured metric; unparsable AI answers save candidates UNSCORED rather than inventing numbers. The operator's own domains, existing prospects and in-batch duplicates are excluded.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        keyword: { type: "string", description: "Topic to find publishers for" },
+        pattern: { type: "string", enum: ["resource", "listicle", "guest_post", "article"], description: "Discovery query pattern (default resource)" },
+        campaignId: campaignArg,
+        targetAsset: { type: "string", description: "Page or asset you may pitch" },
+        excludeDomains: { type: "array", items: { type: "string" }, description: "Domains to skip" },
+      },
+      required: ["keyword"],
+    },
+    handler: async (userId, args) => {
+      const keyword = String(args.keyword ?? "").trim();
+      if (!keyword) throw new Error("keyword required");
+      const pattern = args.pattern ?? "resource";
+      if (!isDiscoveryPattern(pattern)) throw new Error("invalid pattern");
+      return discoverProspects(userId, {
+        keyword,
+        pattern,
+        campaignId: args.campaignId ? String(args.campaignId) : undefined,
+        targetAsset: args.targetAsset ? String(args.targetAsset) : undefined,
+        excludeDomains: Array.isArray(args.excludeDomains) ? args.excludeDomains.map(String) : undefined,
+      });
+    },
+  },
+  {
+    name: "find_prospect_contact",
+    cost: "net",
+    readOnly: false,
+    idempotent: true,
+    description:
+      "Look up a prospect's published contact: reads the site's home, /contact, /about and /write-for-us pages (robots.txt respected, ≤5 pages), and stores ONLY literally-published email addresses. Nothing found is the honest answer — recorded as no_contact_found; addresses are never guessed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Prospect id from list_outreach_prospects" },
+      },
+      required: ["id"],
+    },
+    handler: async (userId, args) => {
+      const id = String(args.id ?? "").trim();
+      if (!id) throw new Error("Missing required argument: id");
+      return findContact(userId, id);
+    },
+  },
+  {
+    name: "draft_outreach",
+    cost: "net",
+    readOnly: false,
+    idempotent: false,
+    description:
+      "Generate personalized outreach DRAFTS for a qualified prospect (initial + up to 2 follow-ups), grounded in the prospect's actual page content. Drafts are stored with status 'draft' and CANNOT be sent from here: there is no send capability anywhere in this app — the operator reviews, edits, approves in the UI, sends from their own mailbox, and confirms manually. Requires stage qualified or ready.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Prospect id from list_outreach_prospects" },
+      },
+      required: ["id"],
+    },
+    handler: async (userId, args) => {
+      const id = String(args.id ?? "").trim();
+      if (!id) throw new Error("Missing required argument: id");
+      return generateDrafts(userId, id);
+    },
+  },
+  {
+    name: "list_outreach_drafts",
+    cost: "local",
+    readOnly: true,
+    description:
+      "List the AI-generated outreach drafts of one prospect with their approval status. Read-only: approval and send-confirmation happen in the OpenGSC UI by the human operator.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Prospect id from list_outreach_prospects" },
+      },
+      required: ["id"],
+    },
+    handler: async (userId, args) => {
+      const id = String(args.id ?? "").trim();
+      if (!id) throw new Error("Missing required argument: id");
+      return { drafts: await listDrafts(userId, id) };
+    },
   },
 ];

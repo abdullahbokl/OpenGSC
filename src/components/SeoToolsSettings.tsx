@@ -971,6 +971,92 @@ function SearxngCard() {
   );
 }
 
+
+// Link Tracker — the self-hosted placement registry (AGPL upstream, unmodified Docker service).
+// The server mirrors placements into it (src/lib/linktracker/client.ts); OpenGSC stays the
+// authoritative record, so this card only wires credentials (URL / admin email / admin
+// password). The test button checks what was TYPED against the registry's live /api/health and
+// login, exactly like the A-Parser card's ping — a wrong credential never gets saved.
+function LinkTrackerCard() {
+  const { t } = useLanguage();
+  const [baseUrl, setBaseUrl] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [visible, setVisible] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    setBaseUrl(localStorage.getItem("seoBaseUrl_linktracker") || "");
+    setEmail(localStorage.getItem("seoLinkTrackerEmail") || "");
+    setPassword(localStorage.getItem("seoKey_linktracker") || "");
+  }, []);
+
+  const persist = () => {
+    const url = baseUrl.trim(), mail = email.trim(), pw = password.trim();
+    if (url) localStorage.setItem("seoBaseUrl_linktracker", url); else localStorage.removeItem("seoBaseUrl_linktracker");
+    if (mail) localStorage.setItem("seoLinkTrackerEmail", mail); else localStorage.removeItem("seoLinkTrackerEmail");
+    if (pw) localStorage.setItem("seoKey_linktracker", pw); else localStorage.removeItem("seoKey_linktracker");
+  };
+
+  async function check() {
+    setBusy(true); setStatus(null);
+    try {
+      const res = await fetch("/api/linktracker", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test", url: baseUrl.trim(), email: email.trim(), password: password.trim() }),
+      });
+      const d = await res.json();
+      setStatus({ ok: !!d?.ok, text: String(d?.detail ?? d?.error ?? res.status) });
+      if (d?.ok) persist();
+    } catch (e) {
+      setStatus({ ok: false, text: String((e as Error)?.message ?? e) });
+    }
+    setBusy(false);
+  }
+
+  const configured = !!email.trim() && !!password.trim();
+  const inp: React.CSSProperties = { width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-text-primary)", fontSize: "12px", outline: "none", boxSizing: "border-box", fontFamily: "monospace" };
+
+  return (
+    <div style={{ padding: "16px", borderRadius: "10px", border: `1px solid ${configured ? "#10b98140" : "var(--color-border)"}`, background: configured ? "#10b98108" : "rgba(255,255,255,0.02)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+        <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "#10b98120", border: "1px solid #10b98140", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "#10b981", flexShrink: 0 }}>L</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-text-primary)" }}>Link Tracker</div>
+          <div style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{t("seoLinkTrackerRole")}</div>
+        </div>
+        <span style={{ fontSize: "11px", fontWeight: 600, color: configured ? "#10B981" : "var(--color-text-secondary)" }}>
+          {configured ? t("seoLinkTrackerConfigured") : "Not set"}
+        </span>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "8px" }}>
+        <input style={inp} placeholder={t("seoLinkTrackerUrlPh")} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+        <input style={inp} placeholder={t("seoLinkTrackerEmailPh")} value={email} onChange={e => setEmail(e.target.value)} autoComplete="off" />
+        <div style={{ position: "relative" }}>
+          <input style={{ ...inp, paddingRight: "36px" }} type={visible ? "text" : "password"} placeholder={t("seoLinkTrackerPassPh")} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && check()} />
+          <button onClick={() => setVisible(v => !v)} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-secondary)", padding: 0, display: "flex" }}>
+            <Eye size={14} style={{ opacity: visible ? 1 : 0.5 }} />
+          </button>
+        </div>
+        <button onClick={check} disabled={busy || !email.trim() || !password.trim()}
+          style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: "8px", border: "none", background: busy ? "rgba(255,255,255,0.06)" : "#10b98125", color: busy ? "var(--color-text-secondary)" : "#10b981", fontSize: "12px", fontWeight: 600, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+          <RefreshCw size={12} style={{ animation: busy ? "spin 1s linear infinite" : undefined }} /> {busy ? t("aparserChecking") : t("aparserTest")}
+        </button>
+      </div>
+
+      {status && (
+        <div style={{ fontSize: "11px", fontFamily: "monospace", color: status.ok ? "#10B981" : "#f87171", marginBottom: "6px", wordBreak: "break-all" }}>
+          {status.ok ? "✓ " : "✕ "}{status.text}
+        </div>
+      )}
+
+      <div style={{ fontSize: "11px", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>{t("seoLinkTrackerHint")}</div>
+    </div>
+  );
+}
+
 export function SeoProviderKeysSection() {
   const { t } = useLanguage();
   return (
@@ -980,6 +1066,7 @@ export function SeoProviderKeysSection() {
         {SEO_PROVIDERS.map(p => <SeoKeyCard key={p.id} provider={p} />)}
         <AparserCard />
         <Crawl4aiCard />
+        <LinkTrackerCard />
       </div>
       <div style={{ marginTop: "14px", padding: "11px 14px", borderRadius: "8px", background: "rgba(16,163,127,0.06)", border: "1px solid rgba(16,163,127,0.18)", fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
         💡 {t("seoSetTip")}

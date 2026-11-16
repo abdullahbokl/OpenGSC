@@ -22,6 +22,10 @@ const EXACT_KEYS = [
   // browser, so a value that lived only in localStorage would be invisible to the thing it
   // configures. It rides the same mirror as everything else rather than getting its own endpoint.
   "seoWarmupSchedule",
+  // The daily outreach cap is enforced SERVER-SIDE (src/lib/outreach/drafts.ts) on the one
+  // choke point every path to `contacted` shares — but a browser control sets it, so the value
+  // must reach the same mirror the server reads or the limit would drift per device.
+  "seoOutreachDailyCap",
   // Same reason, one step further: the provider log's body-capture switch is read by the logger
   // inside every server process — API routes, the seven schedulers, the detached job runner —
   // none of which has a browser to read localStorage from. Left out of this list the toggle would

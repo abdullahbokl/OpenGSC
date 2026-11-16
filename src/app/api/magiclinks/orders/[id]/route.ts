@@ -42,6 +42,7 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
         await importPurchasedPlacements({
           siteId: owner.siteId, provider: PROVIDER_FIELDLINK, orderId: id,
           placements: placementsFromFieldLink(rows),
+          userId,
         });
         if (isFieldLinkTerminal(order.status)) await markOrderTracked(PROVIDER_FIELDLINK, id);
       })().catch(() => { /* the import is a bonus, not the response's job */ });
@@ -79,6 +80,7 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
       await importPurchasedPlacements({
         siteId: owner.siteId, provider: kind, orderId: id,
         placements: links ? placementsFromMagic369Links(placed) : placementsFromMagic369(articles),
+        userId,
       });
       if (isMagic369Terminal(order)) await markOrderTracked(kind, id);
     })().catch(() => { /* same as above */ });

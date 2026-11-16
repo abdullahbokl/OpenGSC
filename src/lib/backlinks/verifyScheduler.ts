@@ -121,9 +121,45 @@ async function tick(): Promise<void> {
     await verifyStale();
   } catch (e) {
     console.warn("[bl-verify-cron] tick failed:", e);
+  }
+  try {
+    await mirrorLostPurchases();
+  } catch (e) {
+    console.warn("[lt-mirror] tick failed:", e);
+  }
+  // Drain the registry mirror queue (bounded batch, errors recorded, never thrown).
+  try {
+    const { drainSync } = await import("@/lib/linktracker/client");
+    await drainSync();
+  } catch (e) {
+    console.warn("[lt-drain] tick failed:", e);
   } finally {
     running = false;
   }
+}
+
+// Lost-link write-back to the Link Tracker registry: OpenGSC's verifier is authoritative, and
+// this is a ONE-WAY push of its verdict (missing → removed). Guarded three ways so a tick can
+// never spam the queue: only purchase-provenance rows, only rows the registry mirror knows
+// (same normalized-pair ref the import used), and only once per verdict (enqueueStatusOnce).
+// Wrap-and-forget: registry trouble must not touch the verify tick.
+async function mirrorLostPurchases(): Promise<void> {
+  try {
+    const rows = await prisma.siteBacklink.findMany({
+      where: { purchaseProvider: { not: "" }, purchaseOrderId: { not: "" }, checkStatus: "missing" },
+      select: { urlFromNorm: true, urlTo: true, purchaseProvider: true, site: { select: { userId: true } } },
+      take: 200,
+    });
+    if (!rows.length) return;
+    const { enqueueStatusOnce, placementRef } = await import("@/lib/linktracker/client");
+    for (const r of rows) {
+      await enqueueStatusOnce(
+        r.site.userId,
+        `${placementRef(r.urlFromNorm, r.urlTo, r.purchaseProvider)}:status`,
+        "removed",
+      );
+    }
+  } catch { /* tables absent or registry unconfigured — the verify tick is unaffected */ }
 }
 
 export function startBacklinkVerifyScheduler(): void {

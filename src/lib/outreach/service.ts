@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { isHttpUrl, normalizeProspectDomain, OUTREACH_STAGE_SET } from "./types";
+import { assertOutreachCap } from "./drafts";
 
 const text = (value: unknown, max: number) => String(value ?? "").trim().slice(0, max);
 
@@ -201,6 +202,14 @@ export async function updateOutreachProspect(userId: string, id: string, input: 
   const stageChanged = stage !== existing.stage;
   const now = new Date();
 
+  // The daily outreach cap is enforced at this ONE choke point: every path to `contacted`
+  // (UI button, API route, MCP tool, the drafts' confirm-sent flow) goes through this service
+  // function, so the cap cannot be routed around. Re-confirming an already-contacted prospect
+  // is not a new outreach and does not consume the allowance.
+  if (stageChanged && stage === "contacted" && existing.stage !== "contacted") {
+    await assertOutreachCap(userId);
+  }
+
   return prisma.$transaction(async tx => {
     const updated = await tx.outreachProspect.update({
       where: { id },
@@ -225,6 +234,27 @@ export async function updateOutreachProspect(userId: string, id: string, input: 
       await tx.outreachStageEvent.create({
         data: { prospectId: id, userId, fromStage: existing.stage, toStage: stage, note: text(input.stageNote, 1000) },
       });
+    }
+    return updated;
+  }).then(async updated => {
+    // A won prospect with a real placement URL also lands in the Link Tracker registry —
+    // queued, not awaited: the registry is complementary and must never block or fail the
+    // stage transition. Re-wins (won → something → won) reuse the same external ref.
+    if (stageChanged && stage === "won") {
+      const placementUrl = backlink?.url || input.wonBacklinkUrl;
+      const placement = String(placementUrl ?? "").trim();
+      if (placement && isHttpUrl(placement)) {
+        try {
+          const { enqueuePlacement, placementRef } = await import("@/lib/linktracker/client");
+          await enqueuePlacement(userId, placementRef(placement, updated.targetAsset || "", "outreach"), {
+            placementUrl: placement,
+            targetUrl: updated.targetAsset || "",
+            anchorText: updated.sourceAnchor || "",
+            partnerName: updated.domain,
+            status: "live",
+          });
+        } catch { /* registry unconfigured/absent — the win itself is recorded above */ }
+      }
     }
     return updated;
   });

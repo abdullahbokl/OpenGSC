@@ -262,9 +262,14 @@ export async function importPurchasedPlacements(args: {
   provider: MagicProviderId;
   orderId: string;
   placements: PurchasedPlacement[];
+  /** When present, every imported/claimed placement is ALSO queued for the Link Tracker
+   *  registry (src/lib/linktracker/client.ts). Fire-and-forget: a registry problem must never
+   *  touch this pipeline, and omitting the id leaves the old behavior byte-for-byte. */
+  userId?: string;
 }): Promise<ImportResult> {
   const out: ImportResult = { imported: 0, updated: 0, skipped: 0 };
   const seen = new Set<string>();
+  const mirrored: PurchasedPlacement[] = [];
   for (const p of args.placements) {
     const urlFromNorm = normalizeBacklinkUrl(p.donorUrl);
     const urlTo = String(p.targetUrl).trim();
@@ -312,6 +317,25 @@ export async function importPurchasedPlacements(args: {
       if (backlinksNotMigrated(e)) return out; // tables absent: stop, the answer is "nothing imported"
       out.skipped++;
     }
+    // The mirror uses the NORMALIZED pair: the same pair re-imported later (or checked by the
+    // verify pass) recomputes the identical ref, so registry rows and status write-backs stay
+    // one-to-one with SiteBacklink rows.
+    mirrored.push({ donorUrl: urlFromNorm, targetUrl: urlTo });
+  }
+  if (args.userId && mirrored.length) {
+    // Registry mirror — queued, drained elsewhere, never awaited by this pipeline.
+    try {
+      const { enqueuePlacement, placementRef } = await import("@/lib/linktracker/client");
+      for (const p of mirrored) {
+        await enqueuePlacement(args.userId, placementRef(p.donorUrl, p.targetUrl, args.provider), {
+          placementUrl: p.donorUrl,
+          targetUrl: p.targetUrl,
+          partnerName: providerName(args.provider),
+          particular: "paid",
+          status: "pending",
+        });
+      }
+    } catch { /* registry absent/unconfigured — the verification answer above is unaffected */ }
   }
   return out;
 }
@@ -358,6 +382,7 @@ export async function syncOrderPlacements(
     provider,
     orderId,
     placements,
+    userId,
   });
   if (terminal) await markOrderTracked(provider, orderId);
   return result;

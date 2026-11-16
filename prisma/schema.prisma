@@ -1380,6 +1380,16 @@ model OutreachProspect {
   targetAsset     String   @default("")
   notes           String   @default("")
 
+  // Native discovery provenance (src/lib/outreach/prospecting.ts): where this prospect came
+  // from, under which search, when, and why the qualification pass kept it. Empty for
+  // manually entered prospects — "manual" is a source too, and the empty default means
+  // exactly that rather than an unknown.
+  discoverySource String   @default("")
+  discoveryQuery  String   @default("")
+  discoveredAt    DateTime?
+  qualScore       Float    @default(0)
+  qualReason      String   @default("")
+
   lastContactAt   DateTime?
   nextFollowUpAt  DateTime?
   backlinkId      String?  // validated against a Backlink owned through one of this user's sites
@@ -1390,11 +1400,54 @@ model OutreachProspect {
 
   campaign OutreachCampaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   events   OutreachStageEvent[]
+  drafts   OutreachDraft[]
 
   @@unique([userId, domain])
   @@index([userId, stage])
   @@index([userId, nextFollowUpAt])
   @@index([campaignId])
+}
+
+// AI-drafted outreach messages (src/lib/outreach/drafts.ts). A draft is TEXT UNTIL A HUMAN
+// SAYS OTHERWISE: the only path out of status "draft" is an explicit approve/reject from the
+// owner, and "marking a draft as sent" is a separate confirmation that also moves the prospect
+// to `contacted` under the daily cap. Nothing here ever sends anything.
+model OutreachDraft {
+  id         String    @id @default(cuid())
+  userId     String
+  prospectId String
+  kind       String // initial | followup1 | followup2
+  subject    String    @default("")
+  body       String    @default("")
+  status     String    @default("draft") // draft | approved | rejected
+  rationale  String    @default("")
+  model      String    @default("")
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  prospect OutreachProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+  @@index([prospectId, createdAt])
+}
+
+// Outbound mirror queue for the Link Tracker registry (src/lib/linktracker/client.ts).
+// Rows are written locally first and drained to Link Tracker over HTTP; a failed drain
+// retries with backoff and a synced row is never re-sent — the externalRef is the dedup key
+// on both sides, so replaying a drain cannot create duplicate registry records.
+model LinkTrackerSync {
+  id          String    @id @default(cuid())
+  userId      String
+  externalRef String    @unique
+  kind        String // placement | status
+  payload     String // JSON body for the Link Tracker call
+  attempts    Int       @default(0)
+  lastError   String    @default("")
+  syncedAt    DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, syncedAt])
 }
 
 model OutreachStageEvent {

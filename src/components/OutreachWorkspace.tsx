@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Check, Clipboard, ExternalLink, Link2, Loader2, Mail, Plus, RefreshCw, Save, Target, Trash2, UserRound } from "lucide-react";
+import { Archive, Check, Clipboard, ExternalLink, Link2, Loader2, Mail, Plus, RefreshCw, Save, Search, Send, Sparkles, Target, Trash2, UserRound, Wand2 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/LanguageProvider";
 import { outreachErrorKey, OUTREACH_STAGES } from "@/lib/outreach/types";
 import { useNow } from "@/lib/useNow";
@@ -20,8 +20,12 @@ interface Props {
 interface OutreachEventRow { id: string; fromStage: string | null; toStage: string; createdAt: string }
 interface OutreachCampaignRow { id: string; name: string; status: string; targetAsset: string | null; notes: string | null; total: number; won: number }
 interface OutreachBacklinkRow { id: string; siteId: string; url: string; isAlive: boolean | null; aliveStatus: string | null }
+interface OutreachDraftRow {
+  id: string; prospectId: string; kind: string; subject: string; body: string; status: string; rationale: string; model: string; approvedAt: string | null; createdAt: string;
+}
 interface OutreachProspectRow {
   id: string; domain: string; stage: string; campaignId: string | null;
+  discoverySource?: string | null; qualScore?: number | null; qualReason?: string | null;
   sourceUrl: string | null; sourceTitle: string | null; sourceBrand: string | null; sourceDr: number | null;
   contactName: string | null; contactEmail: string | null; contactUrl: string | null; contactSource: string | null;
   pitchAngle: string | null; targetAsset: string | null; notes: string | null;
@@ -79,6 +83,14 @@ export default function OutreachWorkspace({ mode, refreshToken = 0, onError }: P
   const [filterCampaign, setFilterCampaign] = useState("");
   const [selected, setSelected] = useState<OutreachProspectRow | null>(null);
   const [copied, setCopied] = useState(false);
+  const [drafts, setDrafts] = useState<OutreachDraftRow[]>([]);
+  const [draftsBusy, setDraftsBusy] = useState(false);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [discoverKeyword, setDiscoverKeyword] = useState("");
+  const [discoverPattern, setDiscoverPattern] = useState("resource");
+  const [discoverBusy, setDiscoverBusy] = useState(false);
+  const [discoverNote, setDiscoverNote] = useState("");
+  const [draftCopiedId, setDraftCopiedId] = useState("");
   const [manualDomain, setManualDomain] = useState("");
   const [manualUrl, setManualUrl] = useState("");
   const [campaignName, setCampaignName] = useState("");
@@ -230,6 +242,95 @@ export default function OutreachWorkspace({ mode, refreshToken = 0, onError }: P
     setSaving(false);
   }
 
+  async function runDiscover() {
+    if (!discoverKeyword.trim()) return;
+    setDiscoverBusy(true); setDiscoverNote("");
+    try {
+      const response = await fetch("/api/outreach/discover", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: discoverKeyword, pattern: discoverPattern, campaignId: filterCampaign || null }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "outreach_error");
+      const detail = result.error
+        ? t("outreachDiscoverFailed").replace("{detail}", result.error)
+        : t("outreachDiscoverDone")
+            .replace("{found}", String(result.created ?? 0))
+            .replace("{searched}", String(result.searched ?? 0))
+            .replace("{candidates}", String(result.candidates ?? 0))
+            .replace("{competitors}", String(result.droppedCompetitors ?? 0));
+      setDiscoverNote(detail);
+      await reload();
+    } catch (error) { setDiscoverNote(`${t("outreachDiscoverFailed").replace("{detail}", "")}${(error as Error)?.message ?? ""}`); }
+    setDiscoverBusy(false);
+  }
+
+  async function findContactFor(prospect: OutreachProspectRow) {
+    setContactBusy(true);
+    try {
+      const response = await fetch("/api/outreach/contact", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prospectId: prospect.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "outreach_error");
+      if (selected?.id === prospect.id) {
+        setSelected({ ...selected, contactEmail: result.email || "", contactUrl: result.contactUrl || "", contactSource: result.contactSource || "" });
+      }
+      await reload();
+    } catch (error) { fail((error as Error)?.message); }
+    setContactBusy(false);
+  }
+
+  async function loadDrafts(prospectId: string) {
+    try {
+      const response = await fetch(`/api/outreach/drafts?prospectId=${encodeURIComponent(prospectId)}`, { cache: "no-store" });
+      const result = await response.json();
+      if (response.ok) setDrafts(result.drafts || []);
+    } catch { setDrafts([]); }
+  }
+
+  useEffect(() => { if (selected) void loadDrafts(selected.id); else setDrafts([]); }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function generateDraftsFor() {
+    if (!selected) return;
+    setDraftsBusy(true);
+    try {
+      const response = await fetch("/api/outreach/drafts", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prospectId: selected.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "outreach_error");
+      await loadDrafts(selected.id);
+    } catch (error) { fail((error as Error)?.message); }
+    setDraftsBusy(false);
+  }
+
+  async function draftAction(id: string, action: "approve" | "reject" | "confirmSent") {
+    if (!selected) return;
+    setDraftsBusy(true);
+    try {
+      const response = await fetch("/api/outreach/drafts", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "outreach_error");
+      await loadDrafts(selected.id);
+      await reload();
+    } catch (error) { fail((error as Error)?.message); }
+    setDraftsBusy(false);
+  }
+
+  async function copyDraft(draft: OutreachDraftRow) {
+    try {
+      await navigator.clipboard.writeText(`${draft.subject}\n\n${draft.body}`);
+      setDraftCopiedId(draft.id);
+      setTimeout(() => setDraftCopiedId(""), 1500);
+    } catch { fail("clipboard_error"); }
+  }
+
   if (loading) return <div className="panel" style={{ padding: "36px", textAlign: "center" }}><Loader2 size={18} className="spin" /></div>;
   if (notMigrated) return <div className="panel" style={{ color: "var(--color-accent-orange)", fontSize: "13px" }}>{t("outreachMigrationRequired")}</div>;
 
@@ -293,6 +394,22 @@ export default function OutreachWorkspace({ mode, refreshToken = 0, onError }: P
         <button onClick={createManualProspect} disabled={saving || (!manualDomain.trim() && !manualUrl.trim())} style={{ ...primary, opacity: saving ? 0.55 : 1 }}><Plus size={13} /> {t("outreachAddProspect")}</button>
       </div>
 
+      <div className="panel" style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+        <Sparkles size={14} color="var(--color-accent-purple)" />
+        <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-text-primary)" }}>{t("outreachDiscover")}</span>
+        <input className={input} value={discoverKeyword} onChange={e => setDiscoverKeyword(e.target.value)} placeholder={t("outreachDiscoverKeywordPh")} style={{ width: "240px" }} />
+        <select className={input} value={discoverPattern} onChange={e => setDiscoverPattern(e.target.value)} style={{ width: "auto" }}>
+          <option value="resource">{t("outreachPatternResource")}</option>
+          <option value="listicle">{t("outreachPatternListicle")}</option>
+          <option value="guest_post">{t("outreachPatternGuestPost")}</option>
+          <option value="article">{t("outreachPatternArticle")}</option>
+        </select>
+        <button onClick={runDiscover} disabled={discoverBusy || !discoverKeyword.trim()} style={{ ...ghost, opacity: discoverBusy || !discoverKeyword.trim() ? 0.55 : 1 }}>
+          {discoverBusy ? <Loader2 size={12} className="spin" /> : <Search size={12} />} {t("outreachDiscoverRun")}
+        </button>
+        {discoverNote && <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{discoverNote}</span>}
+      </div>
+
       <div className="panel" style={{ padding: 0, overflowX: "auto" }}>
         <table className="privacy-sensitive" style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
           <thead><tr style={{ textAlign: "left", color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)" }}>
@@ -340,6 +457,48 @@ export default function OutreachWorkspace({ mode, refreshToken = 0, onError }: P
             <select className={input} value={selected.backlinkId || ""} onChange={e => setSelected({ ...selected, backlinkId: e.target.value })}><option value="">{t("outreachNoBacklink")}</option>{(data.backlinks || []).map((backlink: OutreachBacklinkRow) => <option key={backlink.id} value={backlink.id}>{backlink.url}</option>)}</select>
             <input className={input} value={selected.wonBacklinkUrl || ""} onChange={e => setSelected({ ...selected, wonBacklinkUrl: e.target.value })} placeholder={t("outreachWonUrlPh")} />
           </div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+            <button onClick={() => findContactFor(selected)} disabled={contactBusy} style={ghost}>
+              {contactBusy ? <Loader2 size={12} className="spin" /> : <Mail size={12} />} {t("outreachFindContact")}
+            </button>
+            <button onClick={generateDraftsFor} disabled={draftsBusy || !["qualified", "ready"].includes(selected.stage)} title={!["qualified", "ready"].includes(selected.stage) ? t("outreachDraftNeedsQualified") : ""} style={{ ...ghost, opacity: !["qualified", "ready"].includes(selected.stage) ? 0.5 : 1 }}>
+              {draftsBusy ? <Loader2 size={12} className="spin" /> : <Wand2 size={12} />} {t("outreachDraftGenerate")}
+            </button>
+            {(selected.discoverySource || (selected.qualScore ?? 0) > 0) && (
+              <span style={{ fontSize: "10px", color: "var(--color-text-tertiary)", padding: "3px 7px", borderRadius: "6px", background: "var(--color-bg)", border: "1px solid var(--color-border)" }}>
+                {t("outreachQualChip")}: {selected.discoverySource || "?"} · {Math.round(selected.qualScore ?? 0)}/10{selected.qualReason ? ` · ${selected.qualReason}` : ""}
+              </span>
+            )}
+            {selected.contactSource?.startsWith("no_contact_found") && (
+              <span style={{ fontSize: "10px", color: "#ff9f0a" }}>{t("outreachNoContactFound")}</span>
+            )}
+          </div>
+          {drafts.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {drafts.map(draft => (
+                <div key={draft.id} style={{ border: "1px solid var(--color-border)", borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text-primary)" }}>{t(`outreachDraftKind${draft.kind[0].toUpperCase()}${draft.kind.slice(1)}`)}</span>
+                    <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 7px", borderRadius: "6px", color: draft.status === "approved" ? "#34c759" : draft.status === "rejected" ? "#ff375f" : "var(--color-text-secondary)", background: "var(--color-bg)", border: "1px solid var(--color-border)" }}>{t(`outreachDraftStatus${draft.status[0].toUpperCase()}${draft.status.slice(1)}`)}</span>
+                    {draft.model && <span style={{ fontSize: "10px", color: "var(--color-text-tertiary)" }}>{draft.model}</span>}
+                    <span style={{ flex: 1 }} />
+                    <button onClick={() => copyDraft(draft)} style={ghost}><Clipboard size={11} /> {draftCopiedId === draft.id ? t("outreachCopied") : t("outreachCopyDraft")}</button>
+                    {draft.status === "draft" && <>
+                      <button onClick={() => draftAction(draft.id, "approve")} disabled={draftsBusy} style={{ ...ghost, color: "#34c759" }}><Check size={11} /> {t("outreachDraftApprove")}</button>
+                      <button onClick={() => draftAction(draft.id, "reject")} disabled={draftsBusy} style={{ ...ghost, color: "#ff375f" }}>{t("outreachDraftReject")}</button>
+                    </>}
+                    {draft.status === "approved" && !["contacted", "replied", "negotiating", "won"].includes(selected.stage) && (
+                      <button onClick={() => draftAction(draft.id, "confirmSent")} disabled={draftsBusy} style={{ ...ghost, color: "#af52de" }}><Send size={11} /> {t("outreachDraftMarkSent")}</button>
+                    )}
+                  </div>
+                  {draft.subject && <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-text-primary)" }}>{draft.subject}</div>}
+                  <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{draft.body}</div>
+                  {draft.rationale && <div style={{ fontSize: "10px", color: "var(--color-text-tertiary)" }}>{t("outreachDraftRationale")}: {draft.rationale}</div>}
+                </div>
+              ))}
+              <div style={{ fontSize: "11px", color: "var(--color-text-tertiary)" }}>{t("outreachNoAutoSend")}</div>
+            </div>
+          )}
           <textarea className={input} value={selected.pitchAngle || ""} onChange={e => setSelected({ ...selected, pitchAngle: e.target.value })} placeholder={t("outreachPitchAnglePh")} style={{ minHeight: "64px", resize: "vertical" }} />
           <textarea className={input} value={selected.notes || ""} onChange={e => setSelected({ ...selected, notes: e.target.value })} placeholder={t("outreachNotesPh")} style={{ minHeight: "70px", resize: "vertical" }} />
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "8px", alignItems: "start" }}>
