@@ -2136,7 +2136,7 @@
   "rankAddBtn": "Добавить ключи",
   "rankCheckAll": "Проверить позиции",
   "rankChecking": "Проверяю…",
-  "rankNoKey": "Не настроен ключ SERP-провайдера. Добавь ключ Serper.dev, DataForSEO или ScrapingRobot в",
+  "rankNoKey": "Нет доступного поискового провайдера. Rank Tracker работает на self-hosted SearXNG (без ключа, топ-50) или на ключе Serper / DataForSEO / ScrapingRobot / A-Parser — настройте один из них в",
   "rankNoKeywords": "Пока нет отслеживаемых ключей",
   "rankNoKeywordsDesc": "Добавь ключи выше или нажми + рядом с любым запросом в таблице Queries на вкладке Dashboard.",
   "rankColKeyword": "Ключ",
@@ -5981,5 +5981,6 @@
   "geoNoSearchSource": "Нет доступного источника поиска — настройте SearXNG или добавьте ключ Serper (Настройки → SEO Tools). Результаты не выдумывались.",
   "geoNoCitations": "Ответ AI не сослался ни на один из собранных результатов поиска — аудит остановлен, а не сохранён с выдуманными цитатами. Попробуйте снова или выберите другую модель.",
   "serpmonSearxngNote": "Работает на вашем self-hosted SearXNG — бесплатно и без ключа. Снимки покрывают топ-50 результатов (потолок SearXNG); для глубины топ-100 настройте A-Parser.",
-  "serpmonSearxngDepthHint": "SearXNG отдаёт до 50 результатов за запрос; глубина ограничена 50, пока не настроен A-Parser."
+  "serpmonSearxngDepthHint": "SearXNG отдаёт до 50 результатов за запрос; глубина ограничена 50, пока не настроен A-Parser.",
+  "seoSetRankSearxngNote": "SearXNG работает без ключа на вашем сервере: позиции берутся из настроенного набора движков (bing + Google CSE), глубина до 50 результатов. Проверки по городу не поддерживаются — для геолокированных ключевых слов используйте Serper, DataForSEO или A-Parser."
 }

@@ -2136,7 +2136,7 @@
   "rankAddBtn": "Ajouter les mots-clés",
   "rankCheckAll": "Vérifier les positions",
   "rankChecking": "Vérification…",
-  "rankNoKey": "Aucune clé de fournisseur SERP configurée. Ajoutez une clé Serper.dev, DataForSEO ou ScrapingRobot dans",
+  "rankNoKey": "Aucun fournisseur de recherche disponible. Rank Tracker fonctionne sur SearXNG auto-hébergé (sans clé, top 50) ou sur une clé Serper / DataForSEO / ScrapingRobot / A-Parser — configurez-en un dans",
   "rankNoKeywords": "Aucun mot-clé suivi pour le moment",
   "rankNoKeywordsDesc": "Ajoutez des mots-clés ci-dessus, ou cliquez sur + à côté de n’importe quelle requête dans le tableau Requêtes de l’onglet Tableau de bord.",
   "rankColKeyword": "Mot-clé",
@@ -5981,5 +5981,6 @@
   "geoNoSearchSource": "Aucune source de recherche disponible — configurez SearXNG ou ajoutez une clé Serper (Paramètres → SEO Tools). Aucun résultat n'a été fabriqué.",
   "geoNoCitations": "La réponse de l'IA n'a cité aucun des résultats de recherche collectés — l'audit a été interrompu plutôt que sauvegardé avec des citations inventées. Réessayez ou choisissez un autre modèle.",
   "serpmonSearxngNote": "Fonctionne sur votre SearXNG auto-hébergé — gratuit et sans clé. Les instantanés couvrent le top 50 (plafond de SearXNG) ; configurez A-Parser pour une profondeur top 100.",
-  "serpmonSearxngDepthHint": "SearXNG renvoie jusqu'à 50 résultats par requête ; la profondeur est plafonnée à 50 tant que A-Parser n'est pas configuré."
+  "serpmonSearxngDepthHint": "SearXNG renvoie jusqu'à 50 résultats par requête ; la profondeur est plafonnée à 50 tant que A-Parser n'est pas configuré.",
+  "seoSetRankSearxngNote": "SearXNG est sans clé et auto-hébergé : les positions viennent du jeu de moteurs configuré (bing + Google CSE), jusqu'à 50 résultats de profondeur. Les vérifications au niveau ville ne sont pas prises en charge — utilisez Serper, DataForSEO ou A-Parser pour les mots-clés géolocalisés."
 }

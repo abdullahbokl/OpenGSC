@@ -2,8 +2,11 @@
 // switch on the Positions tab. Kept as data rather than derived from the app-wide SERP list:
 // GoAnyAPI serves the content tools but is refused by the tracker (cached SERPs, no depth or
 // language control), and A-Parser is tracker-eligible without being an app-wide SERP source.
+// SearXNG is the keyless self-hosted default — it needs no key row in Settings, so it is
+// selectable here (explicitly) while "configured" server-side means "the instance answers".
 
 export const RANK_PROVIDER_LIST: readonly (readonly [string, string])[] = [
+  ["searxng", "SearXNG"],
   ["serper", "Serper.dev"],
   ["dataforseo", "DataForSEO"],
   ["scrapingrobot", "ScrapingRobot"],

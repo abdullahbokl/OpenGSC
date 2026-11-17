@@ -1169,6 +1169,9 @@ export function SerpProviderPicker() {
         {rankActive === "aparser" && (
           <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", margin: "8px 0 0" }}>{t("seoSetRankAparserNote")}</p>
         )}
+        {rankActive === "searxng" && (
+          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", margin: "8px 0 0" }}>{t("seoSetRankSearxngNote")}</p>
+        )}
         <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em", margin: "14px 0 4px" }}>{t("seoSetRankFallback")}</div>
         <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", margin: "0 0 8px" }}>{t("seoSetRankFallbackDesc")}</p>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>

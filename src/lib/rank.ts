@@ -18,6 +18,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { runSerp } from "@/lib/seo/serp";
+import { searxngConfigured } from "@/lib/seo/searxng";
 import { resolveBaseUrl, setAparserConcurrency } from "@/lib/seo/aparser";
 import { aparserRankPosition } from "@/lib/seo/aparserPositionRun";
 import { checkWithFallback, fallbackForLocation, type RankAttempt } from "@/lib/rankFallback";
@@ -27,11 +28,12 @@ import { rawQuery } from "@/lib/db/raw";
 
 export const RANK_STALE_MS = 20 * 60 * 60 * 1000; // ~daily, resilient to restarts
 
-const MAX_DEPTH: Record<string, number> = { serper: 50, dataforseo: 100, scrapingrobot: 50, aparser: 100 };
+const MAX_DEPTH: Record<string, number> = { serper: 50, dataforseo: 100, scrapingrobot: 50, aparser: 100, searxng: 50 };
 const SMART_BUFFER = 20;
 
-/** Providers that can carry the tracker, in the order the no-choice fallback tries them. */
-export const RANK_PROVIDERS = ["serper", "dataforseo", "scrapingrobot", "aparser"] as const;
+/** Providers that can carry the tracker, in the order the no-choice fallback tries them.
+ * SearXNG sits before A-Parser: both free, but SearXNG is keyless and needs no proxy warm-up. */
+export const RANK_PROVIDERS = ["serper", "dataforseo", "scrapingrobot", "searxng", "aparser"] as const;
 
 /** Parallel checks per batch for A-Parser (the transport's own semaphore still applies). */
 const APARSER_RANK_WORKERS = 3;
@@ -81,6 +83,12 @@ async function configuredIn(s: Record<string, unknown>, provider: string): Promi
   // settings URL). The password goes through the same probe SERP Monitor and the console use:
   // env and settings are both tried when they differ, so a rotated password re-tested in
   // Settings is picked up even while a stale env var is still in place.
+  // SearXNG is keyless and addressed server-side by SEARXNG_BASE_URL — "configured" means the
+  // instance answers, the same bar every other SearXNG consumer applies. Positions are real
+  // observations from the configured engine set (bing + google-cse backed), capped at 50 deep.
+  if (provider === "searxng") {
+    return searxngConfigured() ? { provider, apiKey: "" } : null;
+  }
   if (provider === "aparser") {
     const resolved = resolveBaseUrl(String(s.seoBaseUrl_aparser ?? ""));
     if ("problem" in resolved) return null;
@@ -407,8 +415,9 @@ export async function checkSiteKeywords(
       }
     }
   };
-  if (creds.provider === "aparser") {
-    // Self-hosted: no rate limit to be kind to, and a Position call takes seconds to minutes.
+  if (creds.provider === "aparser" || creds.provider === "searxng") {
+    // Self-hosted: no rate limit to be kind to, and a Position call takes seconds to minutes
+    // (A-Parser) / is free and serialized through the instance's own slot (SearXNG).
     // A few workers keep a 50-keyword tick inside the hour; the transport caps real parallelism.
     let next = 0;
     const worker = async () => { while (next < batch.length) await one(batch[next++]); };

@@ -2136,7 +2136,7 @@
   "rankAddBtn": "Keywords hinzufügen",
   "rankCheckAll": "Positionen prüfen",
   "rankChecking": "Prüfe…",
-  "rankNoKey": "Kein SERP-Provider-Key konfiguriert. Füge einen Serper.dev-, DataForSEO- oder ScrapingRobot-Key hinzu unter",
+  "rankNoKey": "Kein Suchanbieter verfügbar. Rank Tracker läuft auf selbst gehostetem SearXNG (schlüssellos, Top 50) oder auf einem Serper-/DataForSEO-/ScrapingRobot-/A-Parser-Schlüssel – konfigurieren Sie einen davon in",
   "rankNoKeywords": "Noch keine getrackten Keywords",
   "rankNoKeywordsDesc": "Füge oben Keywords hinzu, oder klicke auf + neben einer beliebigen Anfrage in der Anfragen-Tabelle im Dashboard-Tab.",
   "rankColKeyword": "Keyword",
@@ -5981,5 +5981,6 @@
   "geoNoSearchSource": "Keine Suchquelle verfügbar – SearXNG konfigurieren oder einen Serper-Schlüssel hinzufügen (Einstellungen → SEO Tools). Es wurden keine Ergebnisse erfunden.",
   "geoNoCitations": "Die KI-Antwort zitierte keines der gesammelten Suchergebnisse – der Audit wurde gestoppt statt mit erfundenen Quellenangaben gespeichert zu werden. Versuchen Sie es erneut oder wählen Sie ein anderes Modell.",
   "serpmonSearxngNote": "Läuft auf Ihrem selbst gehosteten SearXNG – kostenlos und schlüssellos. Snapshots decken die Top 50 ab (SearXNG-Obergrenze); für Top-100-Tiefe A-Parser konfigurieren.",
-  "serpmonSearxngDepthHint": "SearXNG liefert bis zu 50 Ergebnisse pro Abruf; die Tiefe ist auf 50 begrenzt, solange kein A-Parser konfiguriert ist."
+  "serpmonSearxngDepthHint": "SearXNG liefert bis zu 50 Ergebnisse pro Abruf; die Tiefe ist auf 50 begrenzt, solange kein A-Parser konfiguriert ist.",
+  "seoSetRankSearxngNote": "SearXNG ist schlüssellos und selbst gehostet: Positionen stammen aus dem konfigurierten Engine-Set (bing + Google CSE), bis zu 50 Ergebnisse tief. Checken auf Stadtebene wird nicht unterstützt – für geolokalisierte Keywords Serper, DataForSEO oder A-Parser verwenden."
 }

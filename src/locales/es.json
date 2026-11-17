@@ -2136,7 +2136,7 @@
   "rankAddBtn": "Añadir palabras clave",
   "rankCheckAll": "Comprobar posiciones",
   "rankChecking": "Comprobando…",
-  "rankNoKey": "Sin clave de proveedor de SERP configurada. Añade una clave de Serper.dev, DataForSEO o ScrapingRobot en",
+  "rankNoKey": "No hay proveedor de búsqueda disponible. Rank Tracker funciona con SearXNG autoalojado (sin clave, top 50) o con una clave de Serper / DataForSEO / ScrapingRobot / A-Parser; configure uno en",
   "rankNoKeywords": "Aún no hay palabras clave seguidas",
   "rankNoKeywordsDesc": "Añade palabras clave arriba, o haz clic en + junto a cualquier consulta en la tabla de Consultas de la pestaña Panel.",
   "rankColKeyword": "Palabra clave",
@@ -5981,5 +5981,6 @@
   "geoNoSearchSource": "No hay fuente de búsqueda disponible: configure SearXNG o añada una clave de Serper (Ajustes → SEO Tools). No se fabricaron resultados.",
   "geoNoCitations": "La respuesta de la IA no citó ninguno de los resultados de búsqueda recopilados: la auditoría se detuvo en lugar de guardarse con citas inventadas. Reintente o elija otro modelo.",
   "serpmonSearxngNote": "Funciona con su SearXNG autoalojado: gratis y sin clave. Las instantáneas cubren el top 50 (techo de SearXNG); configure A-Parser para una profundidad top 100.",
-  "serpmonSearxngDepthHint": "SearXNG devuelve hasta 50 resultados por consulta; la profundidad se limita a 50 hasta que se configure A-Parser."
+  "serpmonSearxngDepthHint": "SearXNG devuelve hasta 50 resultados por consulta; la profundidad se limita a 50 hasta que se configure A-Parser.",
+  "seoSetRankSearxngNote": "SearXNG no requiere clave y está autoalojado: las posiciones provienen del conjunto de motores configurado (bing + Google CSE), hasta 50 resultados de profundidad. Las comprobaciones a nivel de ciudad no están disponibles: use Serper, DataForSEO o A-Parser para palabras clave geolocalizadas."
 }

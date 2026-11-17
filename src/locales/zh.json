@@ -2136,7 +2136,7 @@
   "rankAddBtn": "添加关键词",
   "rankCheckAll": "检查排名",
   "rankChecking": "检查中…",
-  "rankNoKey": "未配置 SERP 服务商密钥。请在",
+  "rankNoKey": "没有可用的搜索提供商。Rank Tracker 运行在自托管 SearXNG（免密钥，前 50）或 Serper / DataForSEO / ScrapingRobot / A-Parser 密钥上——请在以下位置配置：",
   "rankNoKeywords": "尚无追踪的关键词",
   "rankNoKeywordsDesc": "在上方添加关键词，或点击仪表盘标签上查询词表格中任意查询词旁边的 +。",
   "rankColKeyword": "关键词",
@@ -5981,5 +5981,6 @@
   "geoNoSearchSource": "没有可用的搜索来源——请配置 SearXNG 或添加 Serper 密钥（设置 → SEO Tools）。未生成任何虚构结果。",
   "geoNoCitations": "AI 回答未引用任何收集到的搜索结果——审计已中止，而不是带着虚构引用保存。请重试或更换模型。",
   "serpmonSearxngNote": "运行在您的自托管 SearXNG 上——免费、免密钥。快照覆盖前 50 个结果（SearXNG 上限）；如需前 100 深度请配置 A-Parser。",
-  "serpmonSearxngDepthHint": "SearXNG 每次抓取最多返回 50 个结果；在配置 A-Parser 之前深度上限为 50。"
+  "serpmonSearxngDepthHint": "SearXNG 每次抓取最多返回 50 个结果；在配置 A-Parser 之前深度上限为 50。",
+  "seoSetRankSearxngNote": "SearXNG 免密钥且自托管：排名来自配置的引擎集（bing + Google CSE），深度最多 50 条。不支持城市级定位检查——地理定位关键词请使用 Serper、DataForSEO 或 A-Parser。"
 }

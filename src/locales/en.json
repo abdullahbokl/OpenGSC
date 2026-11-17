@@ -2136,7 +2136,7 @@
   "rankAddBtn": "Add keywords",
   "rankCheckAll": "Check positions",
   "rankChecking": "Checking…",
-  "rankNoKey": "No SERP provider key configured. Add a Serper.dev, DataForSEO or ScrapingRobot key in",
+  "rankNoKey": "No search provider available. Rank Tracker runs on the self-hosted SearXNG (keyless, top-50) or on a Serper / DataForSEO / ScrapingRobot / A-Parser key — configure one in",
   "rankNoKeywords": "No tracked keywords yet",
   "rankNoKeywordsDesc": "Add keywords above, or click + next to any query in the Queries table on the Dashboard tab.",
   "rankColKeyword": "Keyword",
@@ -5981,5 +5981,6 @@
   "geoNoSearchSource": "No search source available — configure SearXNG or add a Serper key (Settings → SEO Tools). No results were fabricated.",
   "geoNoCitations": "The AI answer cited none of the collected search results — the audit was stopped rather than saved with invented citations. Try again or pick a different model.",
   "serpmonSearxngNote": "Runs on your self-hosted SearXNG — free, keyless. Snapshots cover the top 50 results (SearXNG's ceiling); configure A-Parser for top-100 depth.",
-  "serpmonSearxngDepthHint": "SearXNG serves up to 50 results per pull; depth is capped at 50 unless A-Parser is configured."
+  "serpmonSearxngDepthHint": "SearXNG serves up to 50 results per pull; depth is capped at 50 unless A-Parser is configured.",
+  "seoSetRankSearxngNote": "SearXNG is keyless and self-hosted: positions come from the configured engine set (bing + Google CSE), up to 50 results deep. City-level location checks are not supported — use Serper, DataForSEO or A-Parser for geolocated keywords."
 }

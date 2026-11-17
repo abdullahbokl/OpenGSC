@@ -2136,7 +2136,7 @@
   "rankAddBtn": "Zoekwoorden toevoegen",
   "rankCheckAll": "Posities controleren",
   "rankChecking": "Controleren…",
-  "rankNoKey": "Geen SERP-providersleutel geconfigureerd. Voeg een Serper.dev-, DataForSEO- of ScrapingRobot-sleutel toe in",
+  "rankNoKey": "Geen zoekprovider beschikbaar. Rank Tracker draait op zelf gehoste SearXNG (sleutelloos, top 50) of op een Serper-/DataForSEO-/ScrapingRobot-/A-Parser-sleutel — configureer er een in",
   "rankNoKeywords": "Nog geen gevolgde zoekwoorden",
   "rankNoKeywordsDesc": "Voeg hierboven zoekwoorden toe, of klik op + naast een zoekwoord in de tabel Zoekwoorden op het tabblad Dashboard.",
   "rankColKeyword": "Zoekwoord",
@@ -5981,5 +5981,6 @@
   "geoNoSearchSource": "Geen zoekbron beschikbaar — configureer SearXNG of voeg een Serper-sleutel toe (Instellingen → SEO Tools). Er zijn geen resultaten verzonnen.",
   "geoNoCitations": "Het AI-antwoord citeerde geen enkele verzamelde zoekresultaat — de audit is gestopt in plaats van opgeslagen met verzonnen citaties. Probeer het opnieuw of kies een ander model.",
   "serpmonSearxngNote": "Draait op uw zelf gehoste SearXNG — gratis en sleutelloos. Snapshots dekken de top 50 (SearXNG-plafond); configureer A-Parser voor top-100 diepte.",
-  "serpmonSearxngDepthHint": "SearXNG levert maximaal 50 resultaten per ophaal; de diepte is beperkt tot 50 zolang A-Parser niet is geconfigureerd."
+  "serpmonSearxngDepthHint": "SearXNG levert maximaal 50 resultaten per ophaal; de diepte is beperkt tot 50 zolang A-Parser niet is geconfigureerd.",
+  "seoSetRankSearxngNote": "SearXNG is sleutelloos en zelf gehost: posities komen uit de geconfigureerde engine-set (bing + Google CSE), tot 50 resultaten diep. Controles op stadsniveau worden niet ondersteund — gebruik Serper, DataForSEO of A-Parser voor geolokaliseerde keywords."
 }
